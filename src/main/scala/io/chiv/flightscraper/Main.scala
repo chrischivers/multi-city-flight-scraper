@@ -18,7 +18,8 @@ object Main extends IOApp {
       searches <- SearchConfig
                    .load()
       webDriver = WebDriver.resource(
-        "/Users/chrichiv/Downloads/geckodriver",
+//        "/Users/chrichiv/Downloads/geckodriver",
+        "/usr/bin/geckodriver",
         headless = true
       )
       kayakClient  = KayakClient.apply(webDriver)
