@@ -33,4 +33,5 @@ project/plugins/project/
 .flooignore
 
 search-config.json
+application.conf
 *.json

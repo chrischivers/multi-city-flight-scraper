@@ -1,16 +1,14 @@
 package io.chiv.flightscraper.kayak
 
 import java.io.{BufferedOutputStream, FileOutputStream}
-import java.time.{Instant, LocalDate}
+import java.time.Instant
 
 import cats.data.OptionT
 import cats.effect.{IO, Resource, Timer}
 import cats.syntax.flatMap._
-import io.chiv.flightscraper.model.Model.AirportCode
-import io.chiv.flightscraper.model.Search
-import io.chiv.flightscraper.util._
 import io.chiv.flightscraper.selenium.WebDriver
 import io.chiv.flightscraper.selenium.WebDriver.Screenshot
+import io.chiv.flightscraper.util._
 import io.chrisdavenport.log4cats.Logger
 
 import scala.concurrent.duration.{FiniteDuration, _}
@@ -37,6 +35,7 @@ object KayakClient {
             _           <- driver.setUrl(url)
             _           <- waitToBeReady(driver).withRetry(3)
             lowestPrice <- extractLowestPrice(driver)
+            _           <- logger.info(s"Lowest price obtained for $url was $lowestPrice")
           } yield lowestPrice
         }
 
@@ -75,12 +74,10 @@ object KayakClient {
 
         } yield price).value
 
-      private def writeScreenshot(screenshot: Screenshot) = IO {
-        val bos =
-          new BufferedOutputStream(new FileOutputStream("screenshot.jpg"))
-        bos.write(screenshot.value)
-        bos.close() // You may end up with 0 bytes file if not calling close.
-      }
+      private def writeScreenshot(screenshot: Screenshot): IO[Unit] =
+        Resource.make(IO(new BufferedOutputStream(new FileOutputStream("error-screenshot.jpg"))))(bos => IO(bos.close())).use { bos =>
+          IO(bos.write(screenshot.value))
+        }
     }
   }
 

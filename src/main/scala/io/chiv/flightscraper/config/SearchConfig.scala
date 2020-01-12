@@ -1,8 +1,8 @@
-package io.chiv.flightscraper
+package io.chiv.flightscraper.config
 
 import cats.effect.IO
 import io.chiv.flightscraper.model.Search
-import io.circe.parser._
+import io.circe.parser.parse
 
 import scala.io.Source
 

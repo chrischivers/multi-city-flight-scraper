@@ -1,19 +1,19 @@
 package io.chiv.flightscraper
 
 import cats.effect.IO
-import io.chiv.flightscraper.Main.logger
 import io.chiv.flightscraper.kayak.{KayakClient, KayakParams, KayakParamsGrouping}
 import io.chiv.flightscraper.model.Search
 import cats.syntax.traverse._
 import cats.syntax.flatMap._
 import cats.instances.list._
+import io.chrisdavenport.log4cats.Logger
 
 trait FlightSearcher {
   def process(searches: List[Search]): IO[Map[Search, (KayakParamsGrouping, Int)]]
 }
 
 object FlightSearcher {
-  def apply(kayakClient: KayakClient): FlightSearcher = new FlightSearcher {
+  def apply(kayakClient: KayakClient)(implicit logger: Logger[IO]): FlightSearcher = new FlightSearcher {
 
     override def process(searches: List[Search]): IO[Map[Search, (KayakParamsGrouping, Int)]] =
       searches.zipWithIndex
@@ -48,25 +48,3 @@ object FlightSearcher {
 
   }
 }
-
-//case class S3Obj(value: String)
-//
-//case class Source(bucketName: String, paths: List[String])
-//
-//trait S3Client {
-//  def list(bucketName: String, path: String): IO[List[S3Obj]]
-//  def delete(file: S3Obj): IO[Unit]
-//}
-//
-//object x {
-//  val x = new Processor(???).run(???)()
-//}
-//
-//class Processor(s3Client: S3Client) {
-//  def run(source: Source)(predicate: S3Obj => Boolean) =
-//    for {
-//      files         <- source.paths.flatTraverse(x => s3Client.list(source.bucketName, x))
-//      filesToDelete = files.filter(f => predicate(f))
-//      _             <- filesToDelete.traverse(x => s3Client.delete(x))
-//    } yield ()
-//}

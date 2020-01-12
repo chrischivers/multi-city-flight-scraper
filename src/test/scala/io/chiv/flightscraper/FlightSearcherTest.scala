@@ -21,11 +21,11 @@ class FlightSearcherTest extends WordSpec with Matchers with TypeCheckedTripleEq
     }
   }
 
-  def setup(prices: Map[KayakParamsGrouping, Option[Int]] = Map.empty): FlightSearcher = {
-    val client = new KayakClient {
-      override def getLowestPrice(paramsGrouping: KayakParamsGrouping): IO[Option[Int]] = IO(prices.getOrElse(paramsGrouping, None))
-    }
-    FlightSearcher(client)
-  }
+//  def setup(prices: Map[KayakParamsGrouping, Option[Int]] = Map.empty): FlightSearcher = {
+//    val client = new KayakClient {
+//      override def getLowestPrice(paramsGrouping: KayakParamsGrouping): IO[Option[Int]] = IO(prices.getOrElse(paramsGrouping, None))
+//    }
+//    FlightSearcher(client)
+//  }
 
 }

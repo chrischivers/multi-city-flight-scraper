@@ -12,6 +12,9 @@ libraryDependencies ++= Seq(
   "org.seleniumhq.selenium" % "selenium-java"   % "3.141.59",
   "io.chrisdavenport"       %% "log4cats-slf4j" % "1.0.1",
   "ch.qos.logback"          % "logback-classic" % "1.2.3",
+  "com.mailjet"             % "mailjet-client"  % "4.2.1",
+  "com.typesafe"            % "config"          % "1.4.0",
+  "com.iheart"              %% "ficus"          % "1.4.7",
   "org.scalatest"           %% "scalatest"      % "3.0.8" % Test,
   "org.scalacheck"          %% "scalacheck"     % "1.14.1" % "test"
 )
