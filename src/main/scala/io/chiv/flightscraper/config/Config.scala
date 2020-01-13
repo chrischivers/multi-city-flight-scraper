@@ -5,7 +5,7 @@ import com.typesafe.config.ConfigFactory
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 
-case class Config(geckoDriverLocation: String, emailAccessKey: String, emailSecretKey: String)
+case class Config(geckoDriverLocation: String, emailAccessKey: String, emailSecretKey: String, emailAddress: String)
 
 object Config {
   def load() = IO {
@@ -13,7 +13,8 @@ object Config {
     Config(
       config.as[String]("geckoDriverLocation"),
       config.as[String]("emailAccessKey"),
-      config.as[String]("emailSecretKey")
+      config.as[String]("emailSecretKey"),
+      config.as[String]("emailAddress")
     )
   }
 }

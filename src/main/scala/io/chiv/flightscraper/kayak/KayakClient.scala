@@ -6,6 +6,7 @@ import java.time.Instant
 import cats.data.OptionT
 import cats.effect.{IO, Resource, Timer}
 import cats.syntax.flatMap._
+import io.chiv.flightscraper.emailer.EmailClient
 import io.chiv.flightscraper.selenium.WebDriver
 import io.chiv.flightscraper.selenium.WebDriver.Screenshot
 import io.chiv.flightscraper.util._
@@ -19,7 +20,7 @@ trait KayakClient {
 
 object KayakClient {
 
-  def apply(driverResource: Resource[IO, WebDriver])(implicit timer: Timer[IO], logger: Logger[IO]) = {
+  def apply(driverResource: Resource[IO, WebDriver], emailClient: EmailClient)(implicit timer: Timer[IO], logger: Logger[IO]) = {
 
     val maxLoadWaitTime: FiniteDuration              = 3.minutes
     val timeBetweenLoadReadyAttempts: FiniteDuration = 10.seconds
@@ -51,7 +52,7 @@ object KayakClient {
               case false if (Instant.now.toEpochMilli - startTime.toEpochMilli) < maxLoadWaitTime.toMillis =>
                 IO.sleep(timeBetweenLoadReadyAttempts) >> helper
               case _ =>
-                webDriver.takeScreenshot.flatMap(writeScreenshot) >>
+                webDriver.takeScreenshot.flatMap(emailClient.sendError) >>
                   IO.raiseError(
                     new RuntimeException("Wait condition not satisfied")
                   )
@@ -74,10 +75,10 @@ object KayakClient {
 
         } yield price).value
 
-      private def writeScreenshot(screenshot: Screenshot): IO[Unit] =
-        Resource.make(IO(new BufferedOutputStream(new FileOutputStream("error-screenshot.jpg"))))(bos => IO(bos.close())).use { bos =>
-          IO(bos.write(screenshot.value))
-        }
+//      private def writeScreenshot(screenshot: Screenshot): IO[Unit] =
+//        Resource.make(IO(new BufferedOutputStream(new FileOutputStream("error-screenshot.jpg"))))(bos => IO(bos.close())).use { bos =>
+//          IO(bos.write(screenshot.value))
+//        }
     }
   }
 

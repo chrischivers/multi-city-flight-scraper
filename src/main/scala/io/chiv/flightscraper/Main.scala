@@ -26,8 +26,8 @@ object Main extends IOApp {
         config.geckoDriverLocation,
         headless = true
       )
-      kayakClient  = KayakClient.apply(webDriver)
-      emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey)
+      emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
+      kayakClient  = KayakClient.apply(webDriver, emailClient)
       processor    = FlightSearcher(kayakClient)
       lowestPrices <- processor.process(searches)
       _            <- logger.info(s"lowest prices obtained: ${lowestPrices.mkString(",\n")}")
