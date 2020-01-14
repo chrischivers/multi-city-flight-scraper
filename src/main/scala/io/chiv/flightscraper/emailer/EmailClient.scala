@@ -38,9 +38,10 @@ object EmailClient {
                              .put("Name", "CC")
                          ))
                   .put(Emailv31.Message.SUBJECT, subject)
+                  .put(Emailv31.Message.TEXTPART, "N/A")
 
-                htmlBody.foreach(body => jsonObject.put(Emailv31.Message.HTMLPART, body))
-                attachmentArray.foreach(arr => jsonObject.put(Emailv31.Message.ATTACHMENTS, arr))
+                htmlBody.foreach(jsonObject.put(Emailv31.Message.HTMLPART, _))
+                attachmentArray.foreach(jsonObject.put(Emailv31.Message.ATTACHMENTS, _))
 
                 jsonObject
               }
