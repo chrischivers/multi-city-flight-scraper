@@ -8,7 +8,8 @@ case class KayakParamsGrouping(value: NonEmptyList[KayakParams]) {
   def toUri(airlineFilter: Option[NonEmptyList[AirlineCode]]): Uri = {
     val encodedParams = value.map(p => "/" + p.toUriParams).toList.mkString
     Uri.unsafeFromString(
-      s"https://www.kayak.co.uk/flights$encodedParams?sort=price_a${airlineFilter.fold("")(ac => s"&fs=airlines=${ac.toList.mkString(",")}")}"
+      s"https://www.kayak.co.uk/flights$encodedParams?sort=price_a${airlineFilter
+        .fold("")(ac => s"&fs=airlines=${ac.toList.map(_.value).mkString(",")}")}"
     )
   }
 }

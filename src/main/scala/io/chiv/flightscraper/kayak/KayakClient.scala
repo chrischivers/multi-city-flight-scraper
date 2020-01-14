@@ -21,7 +21,7 @@ object KayakClient {
 
   def apply(driverResource: Resource[IO, WebDriver], emailClient: EmailClient)(implicit timer: Timer[IO], logger: Logger[IO]) = {
 
-    val maxLoadWaitTime: FiniteDuration              = 3.minutes
+    val maxLoadWaitTime: FiniteDuration              = 4.minutes
     val timeBetweenLoadReadyAttempts: FiniteDuration = 10.seconds
 
     new KayakClient {
