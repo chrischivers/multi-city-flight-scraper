@@ -27,11 +27,14 @@ object FlightSearcher {
                          case (paramCombination, i) =>
                            for {
                              _ <- logger.info(s"Processing parameter combination ${i + 1}/${paramCombinations.size}")
-                             lowestPrice <- kayakClient.getLowestPrice(paramCombination).map((search, paramCombination, _)).handleErrorWith { err =>
-                                             logger
-                                               .error(s"Error for search $search for params combination $paramCombination. Error [$err]") >>
-                                               IO.raiseError(err)
-                                           }
+                             lowestPrice <- kayakClient
+                                             .getLowestPrice(paramCombination, search.airlineFilter)
+                                             .map((search, paramCombination, _))
+                                             .handleErrorWith { err =>
+                                               logger
+                                                 .error(s"Error for search $search for params combination $paramCombination. Error [$err]") >>
+                                                 IO.raiseError(err)
+                                             }
                            } yield lowestPrice
 
                        }

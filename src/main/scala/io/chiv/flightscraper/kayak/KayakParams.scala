@@ -2,21 +2,14 @@ package io.chiv.flightscraper.kayak
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit._
 
 import cats.data.NonEmptyList
-import io.chiv.flightscraper.model.Model.{
-  AdditionalLeg,
-  AirportCode,
-  FirstLeg,
-  Leg
-}
+import io.chiv.flightscraper.model.Model.{AdditionalLeg, AirportCode, FirstLeg, Leg}
 import io.chiv.flightscraper.model.Search
 import io.chiv.flightscraper.util._
 
-case class KayakParams(order: Int,
-                       from: AirportCode,
-                       to: AirportCode,
-                       date: LocalDate) {
+case class KayakParams(order: Int, from: AirportCode, to: AirportCode, date: LocalDate) {
   def toUriParams =
     s"${from.value}-${to.value}/${KayakParams.urlEncodedDateFor(date)}"
 }
@@ -30,9 +23,7 @@ object KayakParams {
 
   def paramCombinationsFrom(search: Search): List[KayakParamsGrouping] = {
 
-    def helper(accumulatedParams: List[KayakParams],
-               previousLegDate: LocalDate,
-               remainingLegs: List[Leg]): List[KayakParams] = {
+    def helper(accumulatedParams: List[KayakParams], previousLegDate: LocalDate, remainingLegs: List[Leg]): List[KayakParams] =
       remainingLegs match {
         case Nil => accumulatedParams
         case FirstLeg(order, from, to) :: tail =>
@@ -54,10 +45,19 @@ object KayakParams {
           }
       }
 
-    }
-
     val possibleStartDates =
       datesBetween(search.earliestDepartureDate, search.latestDepartureDate)
+
+    def withinMinMaxTripLength(params: List[KayakParams]): Option[Boolean] =
+      for {
+        min      <- search.minimumTotalTripLength
+        max      <- search.maximumTotalTripLength
+        firstLeg <- params.headOption
+        lastLeg  <- params.lastOption
+      } yield {
+        val tripLength = DAYS.between(firstLeg.date, lastLeg.date)
+        tripLength >= min && tripLength <= max
+      }
 
     possibleStartDates
       .flatMap { startDate =>
@@ -66,6 +66,7 @@ object KayakParams {
       .grouped(search.legs.size)
       .toList
       .distinct
+      .filter(params => withinMinMaxTripLength(params).getOrElse(true))
       .map(NonEmptyList.fromList)
       .collect {
         case Some(l) => KayakParamsGrouping(l)

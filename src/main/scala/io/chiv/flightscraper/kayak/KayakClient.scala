@@ -1,21 +1,20 @@
 package io.chiv.flightscraper.kayak
 
-import java.io.{BufferedOutputStream, FileOutputStream}
 import java.time.Instant
 
-import cats.data.OptionT
+import cats.data.{NonEmptyList, OptionT}
 import cats.effect.{IO, Resource, Timer}
 import cats.syntax.flatMap._
 import io.chiv.flightscraper.emailer.EmailClient
+import io.chiv.flightscraper.model.Model.AirlineCode
 import io.chiv.flightscraper.selenium.WebDriver
-import io.chiv.flightscraper.selenium.WebDriver.Screenshot
 import io.chiv.flightscraper.util._
 import io.chrisdavenport.log4cats.Logger
 
 import scala.concurrent.duration.{FiniteDuration, _}
 
 trait KayakClient {
-  def getLowestPrice(paramsGrouping: KayakParamsGrouping): IO[Option[Int]]
+  def getLowestPrice(paramsGrouping: KayakParamsGrouping, airlineFilter: Option[NonEmptyList[AirlineCode]]): IO[Option[Int]]
 }
 
 object KayakClient {
@@ -27,9 +26,9 @@ object KayakClient {
 
     new KayakClient {
 
-      override def getLowestPrice(paramsGrouping: KayakParamsGrouping): IO[Option[Int]] =
+      override def getLowestPrice(paramsGrouping: KayakParamsGrouping, airlineFilter: Option[NonEmptyList[AirlineCode]]): IO[Option[Int]] =
         driverResource.use { driver =>
-          val url = paramsGrouping.toUri
+          val url = paramsGrouping.toUri(airlineFilter)
 
           for {
             _           <- logger.info(s"Looking up price for url ${url.toString()}")

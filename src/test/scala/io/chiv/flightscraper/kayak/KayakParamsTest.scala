@@ -96,7 +96,6 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
             )
           }
         result should ===(expectedResult)
-
       }
 
       "where there are two legs and multiple start dates" in {
@@ -218,6 +217,60 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
         }
         result should ===(expectedResult)
 
+      }
+
+      "filters out dates that are outside of the minimum/maximum trip duration" in {
+
+        val earliestDeparture   = LocalDate.now()
+        val latestDepartureDate = earliestDeparture
+
+        val leg1 = FirstLeg(1, airportCode1, airportCode2)
+
+        val minimumDaysAfterPreviousLeg = 5
+        val maximumDaysAfterPreviousLeg = 10
+
+        val leg2 = AdditionalLeg(
+          2,
+          airportCode2,
+          airportCode3,
+          minimumDaysAfterPreviousLeg,
+          maximumDaysAfterPreviousLeg
+        )
+
+        val minimumOverallTripLength = 7
+        val maximumOverallTripLength = 8
+
+        val search = Search(
+          NonEmptyList.of(leg1, leg2),
+          None,
+          earliestDeparture,
+          latestDepartureDate,
+          Some(minimumOverallTripLength),
+          Some(maximumOverallTripLength)
+        )
+        val result = KayakParams.paramCombinationsFrom(search)
+        result.size should ===(
+          (minimumDaysAfterPreviousLeg to maximumDaysAfterPreviousLeg).count(i => (minimumOverallTripLength to maximumOverallTripLength).contains(i))
+        )
+
+        val expectedResult =
+          (minimumDaysAfterPreviousLeg to maximumDaysAfterPreviousLeg)
+            .filter(i => (minimumOverallTripLength to maximumOverallTripLength).contains(i))
+            .toList
+            .map { daysToAddAfterPreviousLeg =>
+              KayakParamsGrouping(
+                NonEmptyList.of(
+                  KayakParams(1, leg1.from, leg1.to, earliestDeparture),
+                  KayakParams(
+                    2,
+                    leg2.from,
+                    leg2.to,
+                    earliestDeparture.plusDays(daysToAddAfterPreviousLeg)
+                  )
+                )
+              )
+            }
+        result should ===(expectedResult)
       }
     }
 
