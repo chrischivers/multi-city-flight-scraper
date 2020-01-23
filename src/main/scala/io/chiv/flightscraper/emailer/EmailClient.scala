@@ -64,7 +64,7 @@ object EmailClient {
       val attachment = new JSONArray().put(
         new JSONObject()
           .put("ContentType", "image/jpeg")
-          .put("Filename", "error-screenshot.pdf")
+          .put("Filename", "error-screenshot.jpg")
           .put("Base64Content", fileData)
       )
       send("Multi city flight scraper notification: ERROR", None, Some(attachment))
