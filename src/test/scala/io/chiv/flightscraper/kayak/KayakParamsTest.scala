@@ -32,6 +32,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           earliestDeparture,
           latestDepartureDate,
           None,
+          None,
+          None,
           None
         )
         val result = KayakParams.paramCombinationsFrom(search)
@@ -73,6 +75,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           None,
           earliestDeparture,
           latestDepartureDate,
+          None,
+          None,
           None,
           None
         )
@@ -121,6 +125,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           None,
           earliestDeparture,
           latestDepartureDate,
+          None,
+          None,
           None,
           None
         )
@@ -182,6 +188,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           None,
           earliestDeparture,
           latestDepartureDate,
+          None,
+          None,
           None,
           None
         )
@@ -245,6 +253,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           None,
           earliestDeparture,
           latestDepartureDate,
+          None,
+          None,
           Some(minimumOverallTripLength),
           Some(maximumOverallTripLength)
         )
@@ -271,6 +281,42 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
               )
             }
         result should ===(expectedResult)
+      }
+
+      "filters out trips that are outside of the earliest/latest return dates" in {
+
+        val earliestDeparture   = LocalDate.now()
+        val latestDepartureDate = earliestDeparture
+
+        val leg1 = FirstLeg(1, airportCode1, airportCode2)
+
+        val minimumDaysAfterPreviousLeg = 5
+        val maximumDaysAfterPreviousLeg = 10
+
+        val leg2 = AdditionalLeg(
+          2,
+          airportCode2,
+          airportCode3,
+          minimumDaysAfterPreviousLeg,
+          maximumDaysAfterPreviousLeg
+        )
+
+        val earliestReturnDate = earliestDeparture.plusDays(7)
+        val latestReturnDate   = latestDepartureDate.plusDays(9)
+
+        val search = Search(
+          NonEmptyList.of(leg1, leg2),
+          None,
+          earliestDeparture,
+          latestDepartureDate,
+          Some(earliestReturnDate),
+          Some(latestReturnDate),
+          None,
+          None
+        )
+        val result = KayakParams.paramCombinationsFrom(search)
+        result.size should ===(3)
+
       }
     }
 

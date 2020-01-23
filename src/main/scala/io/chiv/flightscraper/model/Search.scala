@@ -12,6 +12,8 @@ case class Search(legs: NonEmptyList[Leg],
                   airlineFilter: Option[NonEmptyList[AirlineCode]],
                   earliestDepartureDate: LocalDate,
                   latestDepartureDate: LocalDate,
+                  earliestReturnFlightDate: Option[LocalDate],
+                  latestReturnFlightDate: Option[LocalDate],
                   minimumTotalTripLength: Option[Int],
                   maximumTotalTripLength: Option[Int])
 

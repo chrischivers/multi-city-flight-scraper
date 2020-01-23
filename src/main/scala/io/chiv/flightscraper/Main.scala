@@ -18,21 +18,23 @@ object Main extends IOApp {
 
   override def run(args: List[String]): IO[ExitCode] = {
 
-    val app = for {
-      config <- Config.load()
-      searches <- SearchConfig
-                   .load()
-      webDriver = WebDriver.resource(
-        config.geckoDriverLocation,
-        headless = true
-      )
-      emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
-      kayakClient  = KayakClient.apply(webDriver, emailClient)
-      processor    = FlightSearcher(kayakClient)
-      lowestPrices <- processor.process(searches)
-      _            <- logger.info(s"lowest prices obtained: ${lowestPrices.mkString(",\n")}")
-      _            <- lowestPrices.toList.traverse { case (search, (paramGrouping, price)) => emailClient.sendNotification(search, price, paramGrouping) }
-    } yield ()
+    def app: IO[Unit] =
+      for {
+        config <- Config.load()
+        searches <- SearchConfig
+                     .load()
+        webDriver = WebDriver.resource(
+          config.geckoDriverLocation,
+          headless = true
+        )
+        emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
+        kayakClient  = KayakClient.apply(webDriver, emailClient)
+        processor    = FlightSearcher(kayakClient)
+        lowestPrices <- processor.process(searches)
+        _            <- logger.info(s"lowest prices obtained: ${lowestPrices.mkString(",\n")}")
+        _            <- lowestPrices.toList.traverse { case (search, (paramGrouping, price)) => emailClient.sendNotification(search, price, paramGrouping) }
+        _            <- app //repeat
+      } yield ()
 
     app.map(_ => ExitCode.Success)
 

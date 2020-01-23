@@ -59,6 +59,15 @@ object KayakParams {
         tripLength >= min && tripLength <= max
       }
 
+    def returnWithinEarliestLatestDates(params: List[KayakParams]): Option[Boolean] =
+      for {
+        earliest <- search.earliestReturnFlightDate
+        latest   <- search.latestReturnFlightDate
+        lastLeg  <- params.lastOption
+      } yield {
+        (lastLeg.date.isAfter(earliest) || lastLeg.date.isEqual(earliest)) && (lastLeg.date.isBefore(latest) || lastLeg.date.isEqual(latest))
+      }
+
     possibleStartDates
       .flatMap { startDate =>
         helper(List.empty, startDate, search.legs.toList)
@@ -67,6 +76,7 @@ object KayakParams {
       .toList
       .distinct
       .filter(params => withinMinMaxTripLength(params).getOrElse(true))
+      .filter(params => returnWithinEarliestLatestDates(params).getOrElse(true))
       .map(NonEmptyList.fromList)
       .collect {
         case Some(l) => KayakParamsGrouping(l)
