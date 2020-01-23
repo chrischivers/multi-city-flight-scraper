@@ -31,7 +31,7 @@ object KayakClient {
           val url = paramsGrouping.toUri(airlineFilter)
 
           for {
-            _           <- logger.info(s"Looking up price for url ${url.toString()}")
+            _           <- logger.info(s"Looking up price for url $url")
             _           <- driver.setUrl(url)
             _           <- waitToBeReady(driver).withRetry(3)
             lowestPrice <- extractLowestPrice(driver)

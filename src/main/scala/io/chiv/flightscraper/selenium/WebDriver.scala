@@ -9,7 +9,7 @@ import org.openqa.selenium.firefox.{FirefoxDriver, FirefoxOptions}
 import scala.collection.JavaConverters._
 
 trait WebDriver {
-  def setUrl(uri: Uri): IO[Unit]
+  def setUrl(uri: String): IO[Unit]
   def findElementsByClassName(className: String): IO[List[WebElement]]
   def findElementsByXPath(xPath: String): IO[List[WebElement]]
   def getCurrentUrl: IO[Uri]
@@ -42,8 +42,8 @@ object WebDriver {
 
     } yield
       new WebDriver {
-        override def setUrl(uri: Uri): IO[Unit] =
-          IO(firefoxDriver.get(uri.renderString))
+        override def setUrl(uri: String): IO[Unit] =
+          IO(firefoxDriver.get(uri))
 
         override def findElementsByClassName(
           className: String
