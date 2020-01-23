@@ -4,12 +4,13 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 import cats.data.NonEmptyList
-import io.chiv.flightscraper.model.Model.{AirlineCode, Leg}
+import io.chiv.flightscraper.model.Model.{AirlineCode, AirportCode, Leg}
 import io.circe.Decoder
 import io.circe.generic.semiauto.deriveDecoder
 
 case class Search(legs: NonEmptyList[Leg],
                   airlineFilter: Option[NonEmptyList[AirlineCode]],
+                  layoverFilter: Option[AirportCode],
                   earliestDepartureDate: LocalDate,
                   latestDepartureDate: LocalDate,
                   earliestReturnFlightDate: Option[LocalDate],

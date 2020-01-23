@@ -34,7 +34,7 @@ object FlightSearcher {
                                    for {
                                      _ <- logger.info(s"Processing parameter combination ${i + 1}/${paramCombinations.size}")
                                      lowestPrice <- kayakClient
-                                                     .getLowestPrice(paramCombination, search.airlineFilter)
+                                                     .getLowestPrice(paramCombination, search.airlineFilter, search.layoverFilter)
                                                      .handleErrorWith(handleSearchError(search, paramCombination))
                                                      .map((search, paramCombination, _))
                                    } yield (paramCombination, lowestPrice)
@@ -44,7 +44,7 @@ object FlightSearcher {
               confirmedResults <- initialResults.traverse {
                                    case (paramCombination, (search, _, None)) =>
                                      kayakClient
-                                       .getLowestPrice(paramCombination, search.airlineFilter)
+                                       .getLowestPrice(paramCombination, search.airlineFilter, search.layoverFilter)
                                        .handleErrorWith(handleSearchError(search, paramCombination))
                                        .map((search, paramCombination, _))
                                    case (_, x) => IO.pure(x)
