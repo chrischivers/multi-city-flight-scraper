@@ -34,13 +34,14 @@ object KayakClient {
         driverResource.use { driver =>
           val url = paramsGrouping.toUri(airlineFilter, layoverFilter)
 
-          for {
+          val process = for {
             _           <- logger.info(s"Looking up price for url $url")
             _           <- driver.setUrl(url)
-            _           <- waitToBeReady(driver).withBackoffRetry(2.hours, 4)
+            _           <- waitToBeReady(driver)
             lowestPrice <- extractLowestPrice(driver)
             _           <- logger.info(s"Lowest price obtained for $url was $lowestPrice")
           } yield lowestPrice
+          process.withBackoffRetry(2.hours, 4)
         }
 
       private def waitToBeReady(webDriver: WebDriver): IO[Unit] = {
