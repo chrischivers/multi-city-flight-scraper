@@ -37,7 +37,7 @@ object KayakClient {
           for {
             _           <- logger.info(s"Looking up price for url $url")
             _           <- driver.setUrl(url)
-            _           <- waitToBeReady(driver).withRetry(3)
+            _           <- waitToBeReady(driver).withBackoffRetry(2.hours, 4)
             lowestPrice <- extractLowestPrice(driver)
             _           <- logger.info(s"Lowest price obtained for $url was $lowestPrice")
           } yield lowestPrice

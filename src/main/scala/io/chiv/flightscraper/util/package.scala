@@ -7,7 +7,7 @@ import cats.syntax.flatMap._
 import io.chrisdavenport.log4cats.Logger
 
 import scala.concurrent.CancellationException
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 
 package object util {
 
@@ -15,7 +15,7 @@ package object util {
     from.toEpochDay.to(to.toEpochDay).map(LocalDate.ofEpochDay).toList
 
   implicit class IOOps[T](io: IO[T])(implicit logger: Logger[IO]) {
-    def withRetry(attempts: Int): IO[T] = {
+    def withRetry(attempts: Int): IO[T] =
       io.attempt.flatMap {
         case Left(err) =>
           logger.error(err.getMessage) >>
@@ -26,11 +26,26 @@ package object util {
              } else logger.info("No more retries") >> IO.raiseError(err))
         case Right(t) => IO.pure(t)
       }
+
+    def withBackoffRetry(maxDelay: FiniteDuration, multiplier: Double, attemptNumber: Int = 1)(implicit timer: Timer[IO]): IO[T] = {
+
+      val delayInSec  = (Math.pow(2.0, attemptNumber) - 1.0) * .5
+      val backOffWait = Math.round(Math.min(delayInSec * multiplier, maxDelay.toSeconds))
+      io.attempt.flatMap {
+        case Left(err) =>
+          logger.error(err.getMessage) >>
+            logger.info(s"retrying another time with backoff wait of $backOffWait seconds") >> IO.sleep(backOffWait.seconds) >> withBackoffRetry(
+            maxDelay,
+            multiplier,
+            attemptNumber + 1
+          )
+        case Right(t) => IO.pure(t)
+      }
     }
 
     def withTimeout(
       timeoutAfter: FiniteDuration
-    )(implicit timer: Timer[IO], contextShift: ContextShift[IO]): IO[T] = {
+    )(implicit timer: Timer[IO], contextShift: ContextShift[IO]): IO[T] =
       IO.race(io, timer.sleep(timeoutAfter)).flatMap {
         case Left(r) => IO.pure(r)
         case Right(_) =>
@@ -38,6 +53,5 @@ package object util {
             new CancellationException(s"IO timed out after $timeoutAfter")
           )
       }
-    }
   }
 }
