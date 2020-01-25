@@ -55,10 +55,10 @@ object KayakClient {
               case false if (Instant.now.toEpochMilli - startTime.toEpochMilli) < maxLoadWaitTime.toMillis =>
                 IO.sleep(timeBetweenLoadReadyAttempts) >> helper
               case _ =>
-                webDriver.takeScreenshot.flatMap(emailClient.sendError) >>
-                  IO.raiseError(
-                    new RuntimeException("Wait condition not satisfied")
-                  )
+//                webDriver.takeScreenshot.flatMap(emailClient.sendError) >>
+                IO.raiseError(
+                  new RuntimeException("Wait condition not satisfied")
+                )
             }
         logger
           .info(s"Waiting for page to load (max wait time $maxLoadWaitTime)") >> helper >> IO
