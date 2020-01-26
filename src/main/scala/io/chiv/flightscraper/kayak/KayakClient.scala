@@ -48,19 +48,24 @@ object KayakClient {
         val startTime = Instant.now
 
         def helper: IO[Unit] =
-          webDriver
-            .findElementsByXPath("//div[@style='transform: translateX(100%);']")
-            .map(_.nonEmpty)
-            .flatMap {
-              case true => IO.unit
-              case false if (Instant.now.toEpochMilli - startTime.toEpochMilli) < maxLoadWaitTime.toMillis =>
-                IO.sleep(timeBetweenLoadReadyAttempts) >> helper
-              case _ =>
-//                webDriver.takeScreenshot.flatMap(emailClient.sendError) >>
-                IO.raiseError(
-                  new RuntimeException("Wait condition not satisfied")
-                )
-            }
+          (for {
+            pageLoaded <- webDriver
+                           .findElementsByXPath("//div[@style='transform: translateX(100%);']")
+                           .map(_.nonEmpty)
+            captchaDisplayed <- webDriver
+                                 .findElementsByXPath("//*[contains(text(),'Please confirm that you are a real KAYAK user')]")
+                                 .map(_.nonEmpty)
+          } yield (pageLoaded, captchaDisplayed)).flatMap {
+            case (true, _) => IO.unit
+            case (false, false) if (Instant.now.toEpochMilli - startTime.toEpochMilli) < maxLoadWaitTime.toMillis =>
+              IO.sleep(timeBetweenLoadReadyAttempts) >> helper
+            case (false, true) => IO.raiseError(new RuntimeException("Captcha encountered while waiting for page to load"))
+            case _ =>
+              IO.raiseError(
+                new RuntimeException("Wait condition not satisfied")
+              )
+          }
+
         logger
           .info(s"Waiting for page to load (max wait time $maxLoadWaitTime)") >> helper >> IO
           .sleep(3.seconds)
