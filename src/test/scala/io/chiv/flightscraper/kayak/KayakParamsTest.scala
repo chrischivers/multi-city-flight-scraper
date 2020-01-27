@@ -27,6 +27,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
 
         val leg = FirstLeg(1, airportCode1, airportCode2)
         val search = Search(
+          "test-search",
           NonEmptyList.of(leg),
           None,
           None,
@@ -72,6 +73,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           maximumDaysAfterPreviousLeg
         )
         val search = Search(
+          "test-search",
           NonEmptyList.of(leg1, leg2),
           None,
           None,
@@ -123,6 +125,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           maximumDaysAfterPreviousLeg
         )
         val search = Search(
+          "test-search",
           NonEmptyList.of(leg1, leg2),
           None,
           None,
@@ -187,6 +190,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           leg3MaximumDaysAfterPreviousLeg
         )
         val search = Search(
+          "test-search",
           NonEmptyList.of(leg1, leg2, leg3),
           None,
           None,
@@ -253,6 +257,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
         val maximumOverallTripLength = 8
 
         val search = Search(
+          "test-search",
           NonEmptyList.of(leg1, leg2),
           None,
           None,
@@ -310,6 +315,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
         val latestReturnDate   = latestDepartureDate.plusDays(9)
 
         val search = Search(
+          "test-search",
           NonEmptyList.of(leg1, leg2),
           None,
           None,

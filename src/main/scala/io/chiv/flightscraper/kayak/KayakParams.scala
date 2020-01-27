@@ -12,6 +12,7 @@ import io.chiv.flightscraper.util._
 case class KayakParams(order: Int, from: AirportCode, to: AirportCode, date: LocalDate) {
   def toUriParams =
     s"${from.value}-${to.value}/${KayakParams.urlEncodedDateFor(date)}"
+
 }
 
 object KayakParams {

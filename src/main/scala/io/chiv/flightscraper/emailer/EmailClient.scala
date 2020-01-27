@@ -53,8 +53,8 @@ object EmailClient {
 
     override def sendNotification(search: Search, lowestPrice: Int, kayakParamsGrouping: KayakParamsGrouping): IO[Unit] =
       send(
-        "Multi city flight scraper notification",
-        Some(s"<p>Lowest price found for search $search.</p><p>Price: $lowestPrice.</p><p>Params: $kayakParamsGrouping</p>"),
+        s"Multi city flight scraper: ${search.name}. Lowest price £$lowestPrice",
+        Some(s"<p>Lowest price found for search [${search.name}].</p><p>Price: £$lowestPrice.</p><p>Params: $kayakParamsGrouping</p>"),
         None
       )
 
