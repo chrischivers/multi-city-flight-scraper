@@ -41,7 +41,7 @@ object KayakClient {
             lowestPrice <- extractLowestPrice(driver)
             _           <- logger.info(s"Lowest price obtained for $url was $lowestPrice")
           } yield lowestPrice
-          process.withBackoffRetry(2.hours, 4)
+          process.withBackoffRetry(2.hours, 8)
         }
 
       private def waitToBeReady(webDriver: WebDriver): IO[Unit] = {
