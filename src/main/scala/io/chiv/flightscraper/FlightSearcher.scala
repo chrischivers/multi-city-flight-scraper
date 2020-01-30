@@ -1,5 +1,6 @@
 package io.chiv.flightscraper
 
+import cats.data.NonEmptyList
 import cats.effect.IO
 import io.chiv.flightscraper.kayak.{KayakClient, KayakParams, KayakParamsGrouping}
 import io.chiv.flightscraper.model.Search
@@ -50,10 +51,11 @@ object FlightSearcher {
                                      .map((paramCombination, _))
                                  case (_, x) => IO.pure(x)
                                }
-            (paramGrouping, price) = confirmedResults
-              .collect { case (params, Some(price)) => (params, price) }
-              .minBy { case (_, price) => price }
-            _ <- emailClient.sendNotification(search, price, paramGrouping)
+            lowestPrices = confirmedResults
+              .collect { case (params, Some(price)) => (price, params) }
+              .sortBy { case (price, _) => price }
+              .take(10)
+            _ <- NonEmptyList.fromList(lowestPrices).fold(IO.unit)(emailClient.sendNotification(search, _))
           } yield ()
       }.void
 
