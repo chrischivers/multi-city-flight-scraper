@@ -44,8 +44,7 @@ object Main extends IOApp {
       IO("tar xzf /tmp/geckodriver.tar.gz".!) >>
       IO("mkdir /tmp/selenium".!) >>
       IO("wget https://selenium-release.storage.googleapis.com/3.141/selenium-server-standalone-3.141.59.jar -O /tmp/selenium.jar".!) >>
-      IO("wget http://www.java2s.com/Code/JarDownload/testng/testng-6.5.1.jar.zip -O /tmp/testng.jar".!) >>
+      IO("wget http://www.java2s.com/Code/JarDownload/testng/testng-6.5.1.jar.zip -O /tmp/testng.jar.zip".!) >>
       IO("unzip /tmp/testng.jar.zip".!) >>
       IO("screen -d -m -S selenium bash -c 'DISPLAY=:1 xvfb-run java -jar /tmp/selenium.jar'".!).void
-
 }
