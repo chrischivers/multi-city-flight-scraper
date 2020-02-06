@@ -7,6 +7,7 @@ import cats.effect.{IO, Resource}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.model._
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient, CreateDynamoDBTableOptions}
+import io.chiv.flightscraper.Main
 import io.chiv.flightscraper.db.DynamoDb.Resources
 import io.chiv.flightscraper.model.Search
 import io.chiv.flightscraper.util.TestGenerators
@@ -18,9 +19,10 @@ import scala.concurrent.ExecutionContext
 
 class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals with TestGenerators {
 
-  implicit val ec    = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(20))
-  implicit val cs    = IO.contextShift(ec)
-  implicit val timer = IO.timer(ec)
+  implicit val ec     = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(20))
+  implicit val cs     = IO.contextShift(ec)
+  implicit val timer  = IO.timer(ec)
+  implicit val logger = Main.logger
 
   "dynamo db" should {
     "return none if there are no records left to process" in {

@@ -1,5 +1,4 @@
 package io.chiv.flightscraper.db
-import java.util
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -7,30 +6,14 @@ import cats.data.{NonEmptyList, OptionT}
 import cats.effect.{IO, Resource, Timer}
 import cats.instances.list._
 import cats.syntax.either._
-import cats.syntax.functor._
 import cats.syntax.flatMap._
+import cats.syntax.functor._
 import cats.syntax.traverse._
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
-import com.amazonaws.services.dynamodbv2.{
-  AcquireLockOptions,
-  AmazonDynamoDB,
-  AmazonDynamoDBClientBuilder,
-  AmazonDynamoDBLockClient,
-  AmazonDynamoDBLockClientOptions,
-  CreateDynamoDBTableOptions,
-  LockItem
-}
 import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap
 import com.amazonaws.services.dynamodbv2.document.{DynamoDB, Item, PrimaryKey, Table}
-import com.amazonaws.services.dynamodbv2.model.{
-  AttributeDefinition,
-  CreateTableRequest,
-  KeySchemaElement,
-  KeyType,
-  ProvisionedThroughput,
-  ResourceInUseException
-}
+import com.amazonaws.services.dynamodbv2.model._
+import com.amazonaws.services.dynamodbv2._
 import io.chiv.flightscraper.db.DB.{RecordId, RecordStatus}
 import io.chiv.flightscraper.kayak.{KayakParams, KayakParamsGrouping}
 import io.chiv.flightscraper.model.Model.Price
@@ -67,14 +50,15 @@ object DynamoDb {
             .builder(amazonDynamoDb, "lockTable")
             .withTimeUnit(TimeUnit.SECONDS)
             .withLeaseDuration(30L)
-            .withHeartbeatPeriod(3L)
-            .withCreateHeartbeatBackgroundThread(true)
+//            .withHeartbeatPeriod(3L)
+//            .withCreateHeartbeatBackgroundThread(true)
             .withPartitionKeyName("key")
             .build()
         )
       )
     )(x => IO(x.close()))
 
+  //TODO have this wait for tables to become active
   def createTablesIfNotExisting(amazonDynamoDB: AmazonDynamoDB)(implicit logger: Logger[IO]) = {
 
     val keySchema            = List(new KeySchemaElement().withAttributeName("record_id").withKeyType(KeyType.HASH)).asJava
@@ -92,7 +76,7 @@ object DynamoDb {
                 .build()
             )
           ).handleErrorWith {
-            case err: ResourceInUseException => logger.info(err)("Not creating table lockTable as already exists")
+            case err: ResourceInUseException => logger.info("Not creating table lockTable as already exists")
           }
       _ <- IO {
             amazonDynamoDB
@@ -108,12 +92,12 @@ object DynamoDb {
                   )
               )
           }.handleErrorWith {
-            case err: ResourceInUseException => logger.info(err)(s"Not creating table ${DynamoDb.tableName} as already exists")
+            case err: ResourceInUseException => logger.info(s"Not creating table ${DynamoDb.tableName} as already exists")
           }
     } yield ()
   }
 
-  def apply(dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient)(implicit timer: Timer[IO]) = new DB {
+  def apply(dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient)(implicit timer: Timer[IO], logger: Logger[IO]) = new DB {
 
     private def scanTable(table: Table, statusFilter: RecordStatus) = {
       val scan = new ScanSpec()
@@ -211,13 +195,12 @@ object DynamoDb {
 
       def acquireLock(): IO[LockItem] =
         IO(lockClient.tryAcquireLock(options)).flatMap { result =>
-          if (result.isPresent) IO(result.get())
-          else IO.sleep(100.milliseconds) >> acquireLock
+          if (result.isPresent)
+            logger.info("Acquired DB Lock") >> IO(result.get())
+          else logger.info("Waiting for DB Lock") >> IO.sleep(1.second) >> acquireLock
         }
 
-      Resource.make(acquireLock())(lockItem => IO(lockClient.releaseLock(lockItem))).use { _ =>
-        f
-      }
+      Resource.make(acquireLock())(lockItem => IO(lockClient.releaseLock(lockItem))).use(_ => f)
     }
   }
 }
