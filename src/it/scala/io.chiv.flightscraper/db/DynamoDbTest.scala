@@ -3,7 +3,7 @@ package io.chiv.flightscraper.db
 import java.util.concurrent.Executors
 
 import cats.data.NonEmptyList
-import cats.effect.{IO, Resource}
+import cats.effect.{Blocker, IO, Resource}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.model._
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient, CreateDynamoDBTableOptions}
@@ -158,12 +158,13 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       amazonDynamoDb <- amazonDynamoDbClientResource
       dynamoDB       <- DynamoDb.dynamoDBResource(amazonDynamoDb)
       lockClient     <- DynamoDb.lockClientResource(amazonDynamoDb)
-    } yield Resources(amazonDynamoDb, dynamoDB, lockClient)).evalMap { resources =>
+      blocker        <- Blocker[IO]
+    } yield Resources(amazonDynamoDb, dynamoDB, lockClient, blocker)).evalMap { resources =>
       for {
         _      <- IO(resources.amazonDynamoDB.deleteTable(DynamoDb.tableName)).attempt
         _      <- IO(resources.amazonDynamoDB.deleteTable("lockTable")).attempt
         _      <- DynamoDb.createTablesIfNotExisting(resources.amazonDynamoDB)
-        client <- IO(DynamoDb(resources.dynamoDb, resources.lockClient))
+        client <- IO(DynamoDb(resources.dynamoDb, resources.lockClient)(implicitly, implicitly, implicitly, resources.blocker))
       } yield client
     }
   }

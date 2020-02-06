@@ -3,7 +3,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import cats.data.{NonEmptyList, OptionT}
-import cats.effect.{IO, Resource, Timer}
+import cats.effect.{Blocker, ContextShift, IO, Resource, Timer}
 import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.flatMap._
@@ -28,7 +28,7 @@ import scala.util.Try
 
 object DynamoDb {
 
-  case class Resources(amazonDynamoDB: AmazonDynamoDB, dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient)
+  case class Resources(amazonDynamoDB: AmazonDynamoDB, dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient, blocker: Blocker)
 
   val tableName = "searches"
 
@@ -97,7 +97,8 @@ object DynamoDb {
     } yield ()
   }
 
-  def apply(dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient)(implicit timer: Timer[IO], logger: Logger[IO]) = new DB {
+  def apply(dynamoDb: DynamoDB,
+            lockClient: AmazonDynamoDBLockClient)(implicit timer: Timer[IO], logger: Logger[IO], cs: ContextShift[IO], blocker: Blocker) = new DB {
 
     private def scanTable(table: Table, statusFilter: RecordStatus) = {
       val scan = new ScanSpec()
@@ -193,14 +194,17 @@ object DynamoDb {
         .builder("key")
         .build()
 
-      def acquireLock(): IO[LockItem] =
-        IO(lockClient.tryAcquireLock(options)).flatMap { result =>
-          if (result.isPresent)
-            logger.info("Acquired DB Lock") >> IO(result.get())
-          else logger.info("Waiting for DB Lock") >> IO.sleep(1.second) >> acquireLock
+      def acquireLock: IO[LockItem] =
+        blocker.blockOn {
+          IO(lockClient.tryAcquireLock(options)).flatMap { result =>
+            if (result.isPresent)
+              logger.info("Acquired DB Lock") >> IO(result.get())
+            else logger.info("Waiting for DB Lock") >> IO.sleep(1.second) >> acquireLock
+          }
         }
 
-      Resource.make(acquireLock())(lockItem => IO(lockClient.releaseLock(lockItem))).use(_ => f)
+      Resource.make(acquireLock)(lockItem => IO(lockClient.releaseLock(lockItem))).use(_ => f)
+
     }
   }
 }

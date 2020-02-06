@@ -1,7 +1,7 @@
 package io.chiv.flightscraper
 
 import cats.data.NonEmptyList
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import io.chiv.flightscraper.kayak.{KayakClient, KayakParams, KayakParamsGrouping}
 import io.chiv.flightscraper.model.Search
 import cats.syntax.traverse._
@@ -21,7 +21,8 @@ trait FlightSearcher {
 
 object FlightSearcher {
   def apply(kayakClient: KayakClient, emailClient: EmailClient, dbClient: DB, searches: List[Search])(
-    implicit logger: Logger[IO]
+    implicit logger: Logger[IO],
+    contextShift: ContextShift[IO]
   ): FlightSearcher = new FlightSearcher {
 
     private def handleSearchError(search: Search, kayakParamsGrouping: KayakParamsGrouping): Throwable => IO[Option[Int]] = { err =>
@@ -88,7 +89,7 @@ object FlightSearcher {
                    .handleErrorWith(handleSearchError(search, kayakParamsGrouping))
                    .retryIf(3, _.isEmpty)
 
-        _ <- dbClient.withLock(dbClient.updatePrice(kayakParamsGrouping.recordId, result))
+        _ <- dbClient.updatePrice(kayakParamsGrouping.recordId, result)
       } yield ()
   }
 

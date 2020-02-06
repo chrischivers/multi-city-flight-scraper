@@ -1,7 +1,7 @@
 package io.chiv.flightscraper.db
 
 import cats.data.NonEmptyList
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import com.amazonaws.services.dynamodbv2.document.Table
 import io.chiv.flightscraper.db.DB.RecordId
 import io.chiv.flightscraper.kayak

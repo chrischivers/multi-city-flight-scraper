@@ -2,7 +2,7 @@ package io.chiv.flightscraper
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import cats.effect.{ExitCode, IO, IOApp, Resource, SyncIO}
+import cats.effect.{Blocker, ExitCode, IO, IOApp, Resource, SyncIO}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDB, AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient}
@@ -44,7 +44,7 @@ object Main extends IOApp.WithContext {
       )
       emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
       kayakClient  = KayakClient.apply(webDriver, emailClient)
-      dbClient: DB = DynamoDb(dynamoResources.dynamoDb, dynamoResources.lockClient)
+      dbClient: DB = DynamoDb(dynamoResources.dynamoDb, dynamoResources.lockClient)(implicitly, implicitly, implicitly, dynamoResources.blocker)
       _            <- DynamoDb.createTablesIfNotExisting(dynamoResources.amazonDynamoDB)
       processor    = FlightSearcher(kayakClient, emailClient, dbClient, searches)
       _            <- processor.processNext()
@@ -66,7 +66,8 @@ object Main extends IOApp.WithContext {
       amazonDynamoDbClientResource <- amazonDynamoDbClientResource
       dynamoDB                     <- DynamoDb.dynamoDBResource(amazonDynamoDbClientResource)
       lockClient                   <- DynamoDb.lockClientResource(amazonDynamoDbClientResource)
-    } yield Resources(amazonDynamoDbClientResource, dynamoDB, lockClient)
+      blocker                      <- Blocker[IO]
+    } yield Resources(amazonDynamoDbClientResource, dynamoDB, lockClient, blocker)
   }
 
   override def run(args: List[String]): IO[ExitCode] =
