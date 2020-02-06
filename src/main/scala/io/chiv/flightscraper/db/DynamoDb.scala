@@ -123,7 +123,7 @@ object DynamoDb {
         } yield (KayakParamsGrouping.WithRecordId(Search.Id(searchId), params, RecordId(recordId)), price)
 
     override def nextParamsToProcess: IO[Option[KayakParamsGrouping.WithRecordId]] =
-      withLockedTable { table =>
+      withTable { table =>
         scanTable(table, RecordStatus.Open).flatMap { items =>
           OptionT
             .fromOption[IO](items.headOption)
@@ -146,13 +146,13 @@ object DynamoDb {
       }
 
     override def completedRecords: IO[List[(KayakParamsGrouping.WithRecordId, Option[Model.Price])]] =
-      withLockedTable { table =>
+      withTable { table =>
         scanTable(table, RecordStatus.Completed)
           .flatMap(list => list.traverse(item => IO.fromEither(parseItem(item).leftMap(str => new RuntimeException(s"Error: $str")))))
       }
 
     override def updatePrice(recordId: DB.RecordId, lowestPrice: Option[Int]): IO[Unit] =
-      withLockedTable { table =>
+      withTable { table =>
         val expressionAttributeNames = Map[String, String]("#P" -> Table.price, "#S" -> Table.searchStatus).asJava
         val expressionAttributeValues =
           Map[String, Object](":price" -> lowestPrice.map(Int.box).orNull, ":status" -> RecordStatus.Completed.value).asJava
@@ -167,7 +167,7 @@ object DynamoDb {
       }.void
 
     override def setTable(data: Map[Search.Id, NonEmptyList[KayakParamsGrouping.WithoutRecordId]]): IO[Unit] =
-      withLockedTable { table =>
+      withTable { table =>
         data.toList.traverse {
           case (searchId, paramsGrouping) =>
             paramsGrouping.toList.traverse { pg =>
@@ -185,8 +185,8 @@ object DynamoDb {
         }.void
       }
 
-    private def withLockedTable[T](f: Table => IO[T]): IO[T] =
-      withLock(IO(dynamoDb.getTable(tableName)).flatMap(f))
+    private def withTable[T](f: Table => IO[T]): IO[T] =
+      IO(dynamoDb.getTable(tableName)).flatMap(f)
 
     override def withLock[T](f: IO[T]): IO[T] = {
       val options = AcquireLockOptions

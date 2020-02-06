@@ -88,7 +88,7 @@ object FlightSearcher {
                    .handleErrorWith(handleSearchError(search, kayakParamsGrouping))
                    .retryIf(3, _.isEmpty)
 
-        _ <- dbClient.updatePrice(kayakParamsGrouping.recordId, result)
+        _ <- dbClient.withLock(dbClient.updatePrice(kayakParamsGrouping.recordId, result))
       } yield ()
   }
 

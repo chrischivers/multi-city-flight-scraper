@@ -56,7 +56,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         .unsafeRunSync()
     }
 
-    "not return the same record in a concurrent context" in {
+    "not return the same record in a concurrent context when lock is used" in {
 
       val searchId = Search.Id("test-string")
       val kpg1     = kayakParamsGrouping()
@@ -66,9 +66,9 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         .use { dynamo =>
           for {
             _           <- dynamo.setTable(data)
-            fib1        <- dynamo.nextParamsToProcess.start
-            fib2        <- dynamo.nextParamsToProcess.start
-            fib3        <- dynamo.nextParamsToProcess.start
+            fib1        <- dynamo.withLock(dynamo.nextParamsToProcess).start
+            fib2        <- dynamo.withLock(dynamo.nextParamsToProcess).start
+            fib3        <- dynamo.withLock(dynamo.nextParamsToProcess).start
             nextParams1 <- fib1.join
             nextParams2 <- fib2.join
             nextParams3 <- fib3.join
