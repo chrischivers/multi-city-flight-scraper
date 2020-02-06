@@ -112,7 +112,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
             _           <- dynamo.updatePrice(nextParams1.get.recordId, Some(100))
             nextParams2 <- dynamo.nextParamsToProcess
             _           = nextParams2.isDefined should ===(true)
-            _           <- dynamo.updatePrice(nextParams2.get.recordId, Some(150))
+            _           <- dynamo.updatePrice(nextParams2.get.recordId, None)
             nextParams3 <- dynamo.nextParamsToProcess
             _           = nextParams3.isDefined should ===(false)
           } yield ()

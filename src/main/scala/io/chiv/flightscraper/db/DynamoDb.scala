@@ -160,7 +160,7 @@ object DynamoDb {
 
         IO(
           table.updateItem(new PrimaryKey(Table.recordId, recordId.value),
-                           "add #P :price set #S=:status",
+                           "set #P=:price, #S=:status",
                            expressionAttributeNames,
                            expressionAttributeValues)
         )
