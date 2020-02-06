@@ -32,23 +32,28 @@ object FlightSearcher {
     }
 
     override def processNext(): IO[Unit] =
-      dbClient.withLock {
-        dbClient.nextParamsToProcess
-          .flatMap {
-            case None =>
-              dbClient.completedRecords.flatMap {
-                case Nil =>
-                  logger.info("Table is empty. Setting up table with search parameters") >>
-                    dbClient.setTable(paramsForSearches)
-                case completedData =>
-                  logger.info("Searches have been completed. Collecting lowest prices and emailing...") >>
-                    collectLowestPricesAndEmail(completedData)
-              }
-            case Some(kpg) =>
-              logger.info(s"Processing Kayak Parameter group ${kpg.recordId} for search id ${kpg.searchId}") >>
-                process(kpg)
-          }
-      }
+      dbClient
+        .withLock {
+          dbClient.nextParamsToProcess
+            .flatMap {
+              case None =>
+                dbClient.completedRecords.flatMap {
+                  case Nil =>
+                    logger.info("Table is empty. Setting up table with search parameters") >>
+                      dbClient.setTable(paramsForSearches).as(None)
+                  case completedData =>
+                    logger.info("Searches have been completed. Collecting lowest prices and emailing...") >>
+                      collectLowestPricesAndEmail(completedData).as(None)
+                }
+              case Some(kpg) => IO.pure(Some(kpg))
+            }
+        }
+        .flatMap {
+          case Some(kpg) =>
+            logger.info(s"Processing Kayak Parameter group ${kpg.recordId} for search id ${kpg.searchId}") >>
+              process(kpg)
+          case None => IO.unit
+        }
 
     private def collectLowestPricesAndEmail(data: List[(KayakParamsGrouping.WithRecordId, Option[Price])]): IO[Unit] =
       data

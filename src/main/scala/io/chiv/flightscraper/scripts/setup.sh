@@ -35,3 +35,13 @@ mkdir multi-city-flight-scraper/src/main/resources
 
 #cd multi-city-flight-scraper
 #sbt run
+
+
+
+# user data as root
+
+#!/bin/bash
+sudo -u ubuntu screen -d -m -S selenium bash -c 'DISPLAY=:1 xvfb-run java -jar /home/ubuntu/selenium/selenium-server-standalone-3.141.59.jar'
+cd /home/ubuntu/multi-city-flight-scraper
+git pull
+sudo -u ubuntu screen -d -m -S sbt bash -c 'sbt run'
