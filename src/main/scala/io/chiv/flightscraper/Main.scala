@@ -1,6 +1,8 @@
 package io.chiv.flightscraper
 
-import cats.effect.{ExitCode, IO, IOApp, Resource}
+import java.util.concurrent.{Executors, TimeUnit}
+
+import cats.effect.{ExitCode, IO, IOApp, Resource, SyncIO}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDB, AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient}
@@ -13,10 +15,23 @@ import io.chiv.flightscraper.selenium.WebDriver
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
-object Main extends IOApp {
+import scala.concurrent.ExecutionContext
+
+object Main extends IOApp.WithContext {
 
   implicit val logger: SelfAwareStructuredLogger[IO] =
     Slf4jLogger.getLogger[IO]
+
+  override protected def executionContextResource: Resource[SyncIO, ExecutionContext] =
+    Resource
+      .make(SyncIO(Executors.newFixedThreadPool(8)))(
+        pool =>
+          SyncIO {
+            pool.shutdown()
+            pool.awaitTermination(10, TimeUnit.SECONDS)
+        }
+      )
+      .map(ExecutionContext.fromExecutorService)
 
   def app(dynamoResources: Resources): IO[Unit] =
     for {
