@@ -5,13 +5,14 @@ import cats.effect.IO
 import com.mailjet.client.resource.Emailv31
 import com.mailjet.client.{ClientOptions, MailjetClient, MailjetRequest}
 import io.chiv.flightscraper.kayak.KayakParamsGrouping
+import io.chiv.flightscraper.model.Model.Price
 import io.chiv.flightscraper.model.Search
 import io.chiv.flightscraper.selenium.WebDriver.Screenshot
 import io.chrisdavenport.log4cats.Logger
 import org.json.{JSONArray, JSONObject}
 
 trait EmailClient {
-  def sendNotification(search: Search, lowestPrices: NonEmptyList[(Int, KayakParamsGrouping)]): IO[Unit]
+  def sendNotification(search: Search, lowestPrices: NonEmptyList[(Price, KayakParamsGrouping)]): IO[Unit]
   def sendError(screenshot: Screenshot): IO[Unit]
 }
 
@@ -52,12 +53,12 @@ object EmailClient {
         logger.info(s"Email sent. Response: ${response.getStatus}. Data: ${response.getData}")
       }
 
-    override def sendNotification(search: Search, lowestPrices: NonEmptyList[(Int, KayakParamsGrouping)]): IO[Unit] =
+    override def sendNotification(search: Search, lowestPrices: NonEmptyList[(Price, KayakParamsGrouping)]): IO[Unit] =
       send(
-        s"Multi city flight scraper: ${search.name}. Lowest price £${lowestPrices.head._1}",
+        s"Multi city flight scraper: ${search.name}. Lowest price £${lowestPrices.head._1.value}",
         Some(
           s"<p>Lowest prices found for search [${search.name}].</p>" +
-            lowestPrices.toList.map(p => s"<p>Price: £${p._1}}.</br>Params: ${p._2.toString}</p>").mkString("\n")
+            lowestPrices.toList.map(p => s"<p>Price: £${p._1.value}}.</br>Params: ${p._2.toString}</p>").mkString("\n")
         ),
         None
       )

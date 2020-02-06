@@ -8,6 +8,8 @@ import cats.data.NonEmptyList
 import io.chiv.flightscraper.model.Model.{AdditionalLeg, AirportCode, FirstLeg, Leg}
 import io.chiv.flightscraper.model.Search
 import io.chiv.flightscraper.util._
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 
 case class KayakParams(order: Int, from: AirportCode, to: AirportCode, date: LocalDate) {
   def toUriParams =
@@ -17,12 +19,16 @@ case class KayakParams(order: Int, from: AirportCode, to: AirportCode, date: Loc
 
 object KayakParams {
 
+  implicit val encoder: Encoder[KayakParams] = deriveEncoder
+
+  implicit val decoder: Decoder[KayakParams] = deriveDecoder
+
   def urlEncodedDateFor(localDate: LocalDate) = {
     val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     s"${localDate.format(dateTimeFormatter)}-h"
   }
 
-  def paramCombinationsFrom(search: Search): List[KayakParamsGrouping] = {
+  def paramCombinationsFrom(search: Search): List[KayakParamsGrouping.WithoutRecordId] = {
 
     def helper(accumulatedParams: List[KayakParams], previousLegDate: LocalDate, remainingLegs: List[Leg]): List[KayakParams] =
       remainingLegs match {
@@ -80,7 +86,7 @@ object KayakParams {
       .filter(params => returnWithinEarliestLatestDates(params).getOrElse(true))
       .map(NonEmptyList.fromList)
       .collect {
-        case Some(l) => KayakParamsGrouping(l)
+        case Some(l) => KayakParamsGrouping.WithoutRecordId(search.id, l)
       }
   }
 

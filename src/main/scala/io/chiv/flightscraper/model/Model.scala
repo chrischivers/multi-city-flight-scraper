@@ -3,7 +3,7 @@ package io.chiv.flightscraper.model
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-import io.circe.Decoder
+import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto.deriveDecoder
 
 object Model {
@@ -31,11 +31,17 @@ object Model {
   object AirportCode {
     implicit val decoder: Decoder[AirportCode] =
       Decoder.decodeString.map(AirportCode(_))
+
+    implicit val encoder: Encoder[AirportCode] = Encoder.encodeString.contramap(_.value)
   }
   case class AirlineCode(value: String)
   object AirlineCode {
     implicit val decoder: Decoder[AirlineCode] =
       Decoder.decodeString.map(AirlineCode(_))
+
+    implicit val encoder: Encoder[AirlineCode] = Encoder.encodeString.contramap(_.value)
   }
+
+  case class Price(value: Int)
 
 }

@@ -1,7 +1,11 @@
 package io.chiv.flightscraper
 
-import cats.effect.{ExitCode, IO, IOApp}
+import cats.effect.{ExitCode, IO, IOApp, Resource}
+import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
+import com.amazonaws.services.dynamodbv2.document.DynamoDB
+import com.amazonaws.services.dynamodbv2.{AmazonDynamoDB, AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient}
 import io.chiv.flightscraper.config.{Config, SearchConfig}
+import io.chiv.flightscraper.db.{DB, DynamoDb}
 import io.chiv.flightscraper.emailer.EmailClient
 import io.chiv.flightscraper.kayak.KayakClient
 import io.chiv.flightscraper.selenium.WebDriver
@@ -13,25 +17,47 @@ object Main extends IOApp {
   implicit val logger: SelfAwareStructuredLogger[IO] =
     Slf4jLogger.getLogger[IO]
 
-  override def run(args: List[String]): IO[ExitCode] = {
+  def app(dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient): IO[Unit] =
+    for {
+      config <- Config.load()
+      searches <- SearchConfig
+                   .load()
+      webDriver = WebDriver.resource(
+        config.geckoDriverLocation,
+        headless = true
+      )
+      emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
+      kayakClient  = KayakClient.apply(webDriver, emailClient)
+      dbClient: DB = DynamoDb(dynamoDb, lockClient)
+      processor    = FlightSearcher(kayakClient, emailClient, dbClient, searches)
+      _            <- processor.processNext()
+      _            <- app(dynamoDb, lockClient) //repeat
+    } yield ()
 
-    def app: IO[Unit] =
-      for {
-        config <- Config.load()
-        searches <- SearchConfig
-                     .load()
-        webDriver = WebDriver.resource(
-          config.geckoDriverLocation,
-          headless = true
+  private def resources: Resource[IO, (DynamoDB, AmazonDynamoDBLockClient)] = {
+
+    def amazonDynamoDbClientResource: Resource[IO, AmazonDynamoDB] =
+      Resource.make(
+        IO(
+          AmazonDynamoDBClientBuilder.standard
+            .withRegion("eu-west-2")
+            .build
         )
-        emailClient = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
-        kayakClient = KayakClient.apply(webDriver, emailClient)
-        processor   = FlightSearcher(kayakClient, emailClient)
-        _           <- processor.process(searches)
-        _           <- app //repeat
-      } yield ()
+      )(client => IO(client.shutdown()))
 
-    app.map(_ => ExitCode.Success)
-
+    for {
+      amazonDynamoDbClientResource <- amazonDynamoDbClientResource
+      dynamoDB                     <- DynamoDb.dynamoDBResource(amazonDynamoDbClientResource)
+      lockClient                   <- DynamoDb.lockClientResource(amazonDynamoDbClientResource)
+    } yield (dynamoDB, lockClient)
   }
+
+  override def run(args: List[String]): IO[ExitCode] =
+    resources
+      .use {
+        case (dynamoDb, lockClient) =>
+          app(dynamoDb, lockClient)
+      }
+      .map(_ => ExitCode.Success)
+
 }

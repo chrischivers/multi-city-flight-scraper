@@ -27,6 +27,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
 
         val leg = FirstLeg(1, airportCode1, airportCode2)
         val search = Search(
+          Search.Id("test-id"),
           "test-search",
           NonEmptyList.of(leg),
           None,
@@ -41,7 +42,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
         val result = KayakParams.paramCombinationsFrom(search)
         result.size should ===(daysToAdd + 1)
         val expectedResult = (0 to daysToAdd).toList.map { daysToAdd =>
-          KayakParamsGrouping(
+          KayakParamsGrouping.WithoutRecordId(
+            Search.Id("test-id"),
             NonEmptyList.of(
               KayakParams(
                 1,
@@ -73,6 +75,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           maximumDaysAfterPreviousLeg
         )
         val search = Search(
+          Search.Id("test-id"),
           "test-search",
           NonEmptyList.of(leg1, leg2),
           None,
@@ -91,7 +94,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
 
         val expectedResult =
           (minimumDaysAfterPreviousLeg to maximumDaysAfterPreviousLeg).toList.map { daysToAddAfterPreviousLeg =>
-            KayakParamsGrouping(
+            KayakParamsGrouping.WithoutRecordId(
+              Search.Id("test-id"),
               NonEmptyList.of(
                 KayakParams(1, leg1.from, leg1.to, earliestDeparture),
                 KayakParams(
@@ -125,6 +129,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           maximumDaysAfterPreviousLeg
         )
         val search = Search(
+          Search.Id("test-id"),
           "test-search",
           NonEmptyList.of(leg1, leg2),
           None,
@@ -144,7 +149,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
         val expectedResult = (0 to daysToAdd).toList.flatMap { departureDateOffset =>
           val departureDate = earliestDeparture.plusDays(departureDateOffset)
           (minimumDaysAfterPreviousLeg to maximumDaysAfterPreviousLeg).toList.map { daysToAddAfterPreviousLeg =>
-            KayakParamsGrouping(
+            KayakParamsGrouping.WithoutRecordId(
+              Search.Id("test-id"),
               NonEmptyList.of(
                 KayakParams(1, leg1.from, leg1.to, departureDate),
                 KayakParams(
@@ -190,6 +196,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           leg3MaximumDaysAfterPreviousLeg
         )
         val search = Search(
+          Search.Id("test-id"),
           "test-search",
           NonEmptyList.of(leg1, leg2, leg3),
           None,
@@ -211,7 +218,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
           (leg2MinimumDaysAfterPreviousLeg to leg2MaximumDaysAfterPreviousLeg).toList.flatMap { leg2DaysToAdd =>
             val departureDateLeg2 = departureDateLeg1.plusDays(leg2DaysToAdd)
             (leg3MinimumDaysAfterPreviousLeg to leg3MaximumDaysAfterPreviousLeg).toList.map { leg3DaysToAdd =>
-              KayakParamsGrouping(
+              KayakParamsGrouping.WithoutRecordId(
+                Search.Id("test-id"),
                 NonEmptyList.of(
                   KayakParams(1, leg1.from, leg1.to, departureDateLeg1),
                   KayakParams(
@@ -257,6 +265,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
         val maximumOverallTripLength = 8
 
         val search = Search(
+          Search.Id("test-id"),
           "test-search",
           NonEmptyList.of(leg1, leg2),
           None,
@@ -278,7 +287,8 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
             .filter(i => (minimumOverallTripLength to maximumOverallTripLength).contains(i))
             .toList
             .map { daysToAddAfterPreviousLeg =>
-              KayakParamsGrouping(
+              KayakParamsGrouping.WithoutRecordId(
+                Search.Id("test-id"),
                 NonEmptyList.of(
                   KayakParams(1, leg1.from, leg1.to, earliestDeparture),
                   KayakParams(
@@ -315,6 +325,7 @@ class KayakParamsTest extends WordSpec with Matchers with TypeCheckedTripleEqual
         val latestReturnDate   = latestDepartureDate.plusDays(9)
 
         val search = Search(
+          Search.Id("test-id"),
           "test-search",
           NonEmptyList.of(leg1, leg2),
           None,

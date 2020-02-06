@@ -27,6 +27,15 @@ package object util {
         case Right(t) => IO.pure(t)
       }
 
+    def retryIf(attempts: Int, retryPredicate: T => Boolean): IO[T] =
+      io.flatMap { t =>
+        if (retryPredicate(t) && attempts > 1)
+          logger.info(s"retrying another ${attempts - 1} times as retry predicate is true") >> retryIf(attempts - 1, retryPredicate)
+        else if (retryPredicate(t))
+          logger.info("No more retries, returning original value") >> IO.pure(t)
+        else IO.pure(t)
+      }
+
     def withBackoffRetry(maxDelay: FiniteDuration, multiplier: Double, attemptNumber: Int = 1)(implicit timer: Timer[IO]): IO[T] = {
 
       val delayInSec  = (Math.pow(2.0, attemptNumber) - 1.0) * .5
