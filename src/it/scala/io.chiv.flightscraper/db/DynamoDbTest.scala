@@ -7,6 +7,7 @@ import cats.effect.{IO, Resource}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.model._
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient, CreateDynamoDBTableOptions}
+import io.chiv.flightscraper.db.DynamoDb.Resources
 import io.chiv.flightscraper.model.Search
 import io.chiv.flightscraper.util.TestGenerators
 import org.scalactic.TypeCheckedTripleEquals
@@ -155,40 +156,13 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       amazonDynamoDb <- amazonDynamoDbClientResource
       dynamoDB       <- DynamoDb.dynamoDBResource(amazonDynamoDb)
       lockClient     <- DynamoDb.lockClientResource(amazonDynamoDb)
-    } yield (amazonDynamoDb, dynamoDB, lockClient)).evalMap {
-      case (amazonDynamoDb, dynamoDB, lockClient) =>
-        val keySchema            = List(new KeySchemaElement().withAttributeName("record_id").withKeyType(KeyType.HASH)).asJava
-        val attributeDefinitions = List(new AttributeDefinition().withAttributeName("record_id").withAttributeType("S")).asJava
-
-        for {
-          _ <- IO(amazonDynamoDb.deleteTable(DynamoDb.tableName)).attempt
-          _ <- IO(amazonDynamoDb.deleteTable("lockTable")).attempt
-          _ <- IO(
-                AmazonDynamoDBLockClient.createLockTableInDynamoDB(
-                  CreateDynamoDBTableOptions
-                    .builder(amazonDynamoDb,
-                             new ProvisionedThroughput()
-                               .withReadCapacityUnits(5L)
-                               .withWriteCapacityUnits(6L),
-                             "lockTable")
-                    .build()
-                )
-              )
-          _ <- IO {
-                amazonDynamoDb.createTable(
-                  new CreateTableRequest()
-                    .withTableName(DynamoDb.tableName)
-                    .withKeySchema(keySchema)
-                    .withAttributeDefinitions(attributeDefinitions)
-                    .withProvisionedThroughput(
-                      new ProvisionedThroughput()
-                        .withReadCapacityUnits(5L)
-                        .withWriteCapacityUnits(6L)
-                    )
-                )
-              }
-          client <- IO(DynamoDb(dynamoDB, lockClient))
-        } yield client
+    } yield Resources(amazonDynamoDb, dynamoDB, lockClient)).evalMap { resources =>
+      for {
+        _      <- IO(resources.amazonDynamoDB.deleteTable(DynamoDb.tableName)).attempt
+        _      <- IO(resources.amazonDynamoDB.deleteTable("lockTable")).attempt
+        _      <- DynamoDb.createTablesIfNotExisting(resources.amazonDynamoDB)
+        client <- IO(DynamoDb(resources.dynamoDb, resources.lockClient))
+      } yield client
     }
   }
 

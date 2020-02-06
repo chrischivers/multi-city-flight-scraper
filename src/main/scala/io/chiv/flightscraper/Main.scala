@@ -5,6 +5,7 @@ import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDB, AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient}
 import io.chiv.flightscraper.config.{Config, SearchConfig}
+import io.chiv.flightscraper.db.DynamoDb.Resources
 import io.chiv.flightscraper.db.{DB, DynamoDb}
 import io.chiv.flightscraper.emailer.EmailClient
 import io.chiv.flightscraper.kayak.KayakClient
@@ -17,7 +18,7 @@ object Main extends IOApp {
   implicit val logger: SelfAwareStructuredLogger[IO] =
     Slf4jLogger.getLogger[IO]
 
-  def app(dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient): IO[Unit] =
+  def app(dynamoResources: Resources): IO[Unit] =
     for {
       config <- Config.load()
       searches <- SearchConfig
@@ -28,13 +29,14 @@ object Main extends IOApp {
       )
       emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
       kayakClient  = KayakClient.apply(webDriver, emailClient)
-      dbClient: DB = DynamoDb(dynamoDb, lockClient)
+      dbClient: DB = DynamoDb(dynamoResources.dynamoDb, dynamoResources.lockClient)
+      _            <- DynamoDb.createTablesIfNotExisting(dynamoResources.amazonDynamoDB)
       processor    = FlightSearcher(kayakClient, emailClient, dbClient, searches)
       _            <- processor.processNext()
-      _            <- app(dynamoDb, lockClient) //repeat
+      _            <- app(dynamoResources) //repeat
     } yield ()
 
-  private def resources: Resource[IO, (DynamoDB, AmazonDynamoDBLockClient)] = {
+  private def resources: Resource[IO, Resources] = {
 
     def amazonDynamoDbClientResource: Resource[IO, AmazonDynamoDB] =
       Resource.make(
@@ -49,15 +51,12 @@ object Main extends IOApp {
       amazonDynamoDbClientResource <- amazonDynamoDbClientResource
       dynamoDB                     <- DynamoDb.dynamoDBResource(amazonDynamoDbClientResource)
       lockClient                   <- DynamoDb.lockClientResource(amazonDynamoDbClientResource)
-    } yield (dynamoDB, lockClient)
+    } yield Resources(amazonDynamoDbClientResource, dynamoDB, lockClient)
   }
 
   override def run(args: List[String]): IO[ExitCode] =
     resources
-      .use {
-        case (dynamoDb, lockClient) =>
-          app(dynamoDb, lockClient)
-      }
+      .use(app)
       .map(_ => ExitCode.Success)
 
 }

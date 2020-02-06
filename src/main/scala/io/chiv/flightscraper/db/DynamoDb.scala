@@ -17,11 +17,20 @@ import com.amazonaws.services.dynamodbv2.{
   AmazonDynamoDBClientBuilder,
   AmazonDynamoDBLockClient,
   AmazonDynamoDBLockClientOptions,
+  CreateDynamoDBTableOptions,
   LockItem
 }
 import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap
 import com.amazonaws.services.dynamodbv2.document.{DynamoDB, Item, PrimaryKey, Table}
+import com.amazonaws.services.dynamodbv2.model.{
+  AttributeDefinition,
+  CreateTableRequest,
+  KeySchemaElement,
+  KeyType,
+  ProvisionedThroughput,
+  ResourceInUseException
+}
 import io.chiv.flightscraper.db.DB.{RecordId, RecordStatus}
 import io.chiv.flightscraper.kayak.{KayakParams, KayakParamsGrouping}
 import io.chiv.flightscraper.model.Model.Price
@@ -34,6 +43,8 @@ import scala.concurrent.duration._
 import scala.util.Try
 
 object DynamoDb {
+
+  case class Resources(amazonDynamoDB: AmazonDynamoDB, dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient)
 
   val tableName = "searches"
 
@@ -62,6 +73,44 @@ object DynamoDb {
         )
       )
     )(x => IO(x.close()))
+
+  def createTablesIfNotExisting(amazonDynamoDB: AmazonDynamoDB) = {
+
+    val keySchema            = List(new KeySchemaElement().withAttributeName("record_id").withKeyType(KeyType.HASH)).asJava
+    val attributeDefinitions = List(new AttributeDefinition().withAttributeName("record_id").withAttributeType("S")).asJava
+
+    for {
+      _ <- IO(
+            AmazonDynamoDBLockClient.createLockTableInDynamoDB(
+              CreateDynamoDBTableOptions
+                .builder(amazonDynamoDB,
+                         new ProvisionedThroughput()
+                           .withReadCapacityUnits(5L)
+                           .withWriteCapacityUnits(6L),
+                         "lockTable")
+                .build()
+            )
+          ).handleErrorWith {
+            case _: ResourceInUseException => IO.unit
+          }
+      _ <- IO {
+            amazonDynamoDB
+              .createTable(
+                new CreateTableRequest()
+                  .withTableName(DynamoDb.tableName)
+                  .withKeySchema(keySchema)
+                  .withAttributeDefinitions(attributeDefinitions)
+                  .withProvisionedThroughput(
+                    new ProvisionedThroughput()
+                      .withReadCapacityUnits(5L)
+                      .withWriteCapacityUnits(6L)
+                  )
+              )
+          }.handleErrorWith {
+            case _: ResourceInUseException => IO.unit
+          }
+    } yield ()
+  }
 
   def apply(dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient)(implicit timer: Timer[IO]) = new DB {
 
