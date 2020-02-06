@@ -35,6 +35,7 @@ import io.chiv.flightscraper.db.DB.{RecordId, RecordStatus}
 import io.chiv.flightscraper.kayak.{KayakParams, KayakParamsGrouping}
 import io.chiv.flightscraper.model.Model.Price
 import io.chiv.flightscraper.model.{Model, Search}
+import io.chrisdavenport.log4cats.Logger
 import io.circe.parser._
 import io.circe.syntax._
 
@@ -74,7 +75,7 @@ object DynamoDb {
       )
     )(x => IO(x.close()))
 
-  def createTablesIfNotExisting(amazonDynamoDB: AmazonDynamoDB) = {
+  def createTablesIfNotExisting(amazonDynamoDB: AmazonDynamoDB)(implicit logger: Logger[IO]) = {
 
     val keySchema            = List(new KeySchemaElement().withAttributeName("record_id").withKeyType(KeyType.HASH)).asJava
     val attributeDefinitions = List(new AttributeDefinition().withAttributeName("record_id").withAttributeType("S")).asJava
@@ -91,7 +92,7 @@ object DynamoDb {
                 .build()
             )
           ).handleErrorWith {
-            case _: ResourceInUseException => IO.unit
+            case err: ResourceInUseException => logger.info(err)("Not creating table lockTable as already exists")
           }
       _ <- IO {
             amazonDynamoDB
@@ -107,7 +108,7 @@ object DynamoDb {
                   )
               )
           }.handleErrorWith {
-            case _: ResourceInUseException => IO.unit
+            case err: ResourceInUseException => logger.info(err)(s"Not creating table ${DynamoDb.tableName} as already exists")
           }
     } yield ()
   }
