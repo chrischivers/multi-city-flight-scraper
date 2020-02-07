@@ -58,11 +58,16 @@ object DynamoDb {
       )
     )(x => IO(x.close()))
 
-  //TODO have this wait for tables to become active
-  def createTablesIfNotExisting(amazonDynamoDB: AmazonDynamoDB)(implicit logger: Logger[IO]) = {
+  def createTablesIfNotExisting(amazonDynamoDB: AmazonDynamoDB)(implicit logger: Logger[IO], timer: Timer[IO]) = {
 
     val keySchema            = List(new KeySchemaElement().withAttributeName("record_id").withKeyType(KeyType.HASH)).asJava
     val attributeDefinitions = List(new AttributeDefinition().withAttributeName("record_id").withAttributeType("S")).asJava
+
+    def awaitTableToBeReady(tableName: String): IO[Unit] =
+      IO(amazonDynamoDB.describeTable("lockTable").getTable.getTableStatus).flatMap {
+        case "ACTIVE" => IO.unit
+        case _        => IO.sleep(5.seconds) >> awaitTableToBeReady(tableName)
+      }
 
     for {
       _ <- IO(
@@ -78,6 +83,7 @@ object DynamoDb {
           ).handleErrorWith {
             case err: ResourceInUseException => logger.info("Not creating table lockTable as already exists")
           }
+      _ <- awaitTableToBeReady("lockTable")
       _ <- IO {
             amazonDynamoDB
               .createTable(
@@ -94,6 +100,7 @@ object DynamoDb {
           }.handleErrorWith {
             case err: ResourceInUseException => logger.info(s"Not creating table ${DynamoDb.tableName} as already exists")
           }
+      _ <- awaitTableToBeReady(DynamoDb.tableName)
     } yield ()
   }
 

@@ -48,7 +48,6 @@ object Main extends IOApp.WithContext {
       _            <- DynamoDb.createTablesIfNotExisting(dynamoResources.amazonDynamoDB)
       processor    = FlightSearcher(kayakClient, emailClient, dbClient, searches)
       _            <- processor.processNext()
-      _            <- app(dynamoResources) //repeat
     } yield ()
 
   private def resources: Resource[IO, Resources] = {
