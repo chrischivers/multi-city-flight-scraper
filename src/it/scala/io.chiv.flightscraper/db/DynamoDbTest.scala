@@ -47,7 +47,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       setupDynamoClient
         .use { dynamo =>
           for {
-            _          <- dynamo.setTable(data)
+            _          <- dynamo.setSearchData(data)
             nextParams <- dynamo.nextParamsToProcess
             _          = nextParams.get.searchId should ===(searchId)
             _          = nextParams.get.params should (be(kpg1.params) or be(kpg2.params))
@@ -65,7 +65,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       setupDynamoClient
         .use { dynamo =>
           for {
-            _           <- dynamo.setTable(data)
+            _           <- dynamo.setSearchData(data)
             fib1        <- dynamo.withLock(dynamo.nextParamsToProcess).start
             fib2        <- dynamo.withLock(dynamo.nextParamsToProcess).start
             fib3        <- dynamo.withLock(dynamo.nextParamsToProcess).start
@@ -87,7 +87,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       setupDynamoClient
         .use { dynamo =>
           for {
-            _           <- dynamo.setTable(data)
+            _           <- dynamo.setSearchData(data)
             nextParams1 <- dynamo.nextParamsToProcess
             _           = nextParams1.isDefined should ===(true)
             nextParams2 <- dynamo.nextParamsToProcess
@@ -106,7 +106,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       setupDynamoClient
         .use { dynamo =>
           for {
-            _           <- dynamo.setTable(data)
+            _           <- dynamo.setSearchData(data)
             nextParams1 <- dynamo.nextParamsToProcess
             _           = nextParams1.isDefined should ===(true)
             _           <- dynamo.updatePrice(nextParams1.get.recordId, Some(100))
@@ -130,13 +130,32 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       setupDynamoClient
         .use { dynamo =>
           for {
-            _                <- dynamo.setTable(data)
+            _                <- dynamo.setSearchData(data)
             nextParams1      <- dynamo.nextParamsToProcess
             _                <- dynamo.updatePrice(nextParams1.get.recordId, Some(100))
             nextParams2      <- dynamo.nextParamsToProcess
             _                <- dynamo.updatePrice(nextParams2.get.recordId, Some(150))
             completedRecords <- dynamo.completedRecords
             _                = completedRecords should have size 2
+          } yield ()
+        }
+        .unsafeRunSync()
+    }
+
+    "delete all records" in {
+      val searchId = Search.Id("test-string")
+      val kpg1     = kayakParamsGrouping()
+      val kpg2     = kayakParamsGrouping()
+      val kpg3     = kayakParamsGrouping()
+      val data     = Map(searchId -> NonEmptyList.of(kpg1, kpg2, kpg3))
+
+      setupDynamoClient
+        .use { dynamo =>
+          for {
+            _          <- dynamo.setSearchData(data)
+            _          <- dynamo.wipeData
+            nextParams <- dynamo.nextParamsToProcess
+            _          = nextParams.isDefined should ===(false)
           } yield ()
         }
         .unsafeRunSync()

@@ -107,13 +107,15 @@ object DynamoDb {
   def apply(dynamoDb: DynamoDB,
             lockClient: AmazonDynamoDBLockClient)(implicit timer: Timer[IO], logger: Logger[IO], cs: ContextShift[IO], blocker: Blocker) = new DB {
 
-    private def scanTable(table: Table, statusFilter: RecordStatus) = {
-      val scan = new ScanSpec()
-        .withFilterExpression(s"${Table.searchStatus} = :status")
-        .withValueMap(
-          new ValueMap()
-            .withString(":status", statusFilter.value)
-        )
+    private def scanTable(table: Table, statusFilter: Option[RecordStatus]) = {
+      val scan = statusFilter.fold(new ScanSpec()) { status =>
+        new ScanSpec()
+          .withFilterExpression(s"${Table.searchStatus} = :status")
+          .withValueMap(
+            new ValueMap()
+              .withString(":status", status.value)
+          )
+      }
       IO(table.scan(scan).iterator().asScala.toList)
     }
 
@@ -132,7 +134,7 @@ object DynamoDb {
 
     override def nextParamsToProcess: IO[Option[KayakParamsGrouping.WithRecordId]] =
       withTable { table =>
-        scanTable(table, RecordStatus.Open).flatMap { items =>
+        scanTable(table, Some(RecordStatus.Open)).flatMap { items =>
           OptionT
             .fromOption[IO](items.headOption)
             .semiflatMap { item =>
@@ -155,7 +157,7 @@ object DynamoDb {
 
     override def completedRecords: IO[List[(KayakParamsGrouping.WithRecordId, Option[Model.Price])]] =
       withTable { table =>
-        scanTable(table, RecordStatus.Completed)
+        scanTable(table, Some(RecordStatus.Completed))
           .flatMap(list => list.traverse(item => IO.fromEither(parseItem(item).leftMap(str => new RuntimeException(s"Error: $str")))))
       }
 
@@ -174,7 +176,7 @@ object DynamoDb {
 
       }.void
 
-    override def setTable(data: Map[Search.Id, NonEmptyList[KayakParamsGrouping.WithoutRecordId]]): IO[Unit] =
+    override def setSearchData(data: Map[Search.Id, NonEmptyList[KayakParamsGrouping.WithoutRecordId]]): IO[Unit] =
       withTable { table =>
         data.toList.traverse {
           case (searchId, paramsGrouping) =>
@@ -192,6 +194,18 @@ object DynamoDb {
 
         }.void
       }
+
+    override def wipeData: IO[Unit] = withTable { table =>
+      withTable { table =>
+        scanTable(table, None).flatMap { list =>
+          list.traverse { item =>
+            IO(Option(item.getString(Table.recordId)).get).flatMap { recordId =>
+              IO(table.deleteItem(Table.recordId, recordId)).void
+            }
+          }.void
+        }
+      }
+    }
 
     private def withTable[T](f: Table => IO[T]): IO[T] =
       IO(dynamoDb.getTable(tableName)).flatMap(f)

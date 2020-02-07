@@ -2,18 +2,17 @@ package io.chiv.flightscraper
 
 import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO}
-import io.chiv.flightscraper.kayak.{KayakClient, KayakParams, KayakParamsGrouping}
-import io.chiv.flightscraper.model.Search
-import cats.syntax.traverse._
+import cats.instances.list._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
-import cats.instances.list._
-import cats.instances.map._
+import cats.syntax.traverse._
 import io.chiv.flightscraper.db.DB
 import io.chiv.flightscraper.emailer.EmailClient
+import io.chiv.flightscraper.kayak.{KayakClient, KayakParams, KayakParamsGrouping}
 import io.chiv.flightscraper.model.Model.Price
+import io.chiv.flightscraper.model.Search
+import io.chiv.flightscraper.util._
 import io.chrisdavenport.log4cats.Logger
-import util._
 
 trait FlightSearcher {
   def processNext(): IO[Unit]
@@ -40,10 +39,10 @@ object FlightSearcher {
                 dbClient.completedRecords.flatMap {
                   case Nil =>
                     logger.info("Table is empty. Setting up table with search parameters") >>
-                      dbClient.setTable(paramsForSearches).as(None)
+                      dbClient.setSearchData(paramsForSearches).as(None)
                   case completedData =>
                     logger.info("Searches have been completed. Collecting lowest prices and emailing...") >>
-                      collectLowestPricesAndEmail(completedData).as(None)
+                      collectLowestPricesAndEmail(completedData) >> dbClient.wipeData.as(None)
                 }
               case Some(kpg) => IO.pure(Some(kpg))
             }
