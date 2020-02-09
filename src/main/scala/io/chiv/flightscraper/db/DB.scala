@@ -8,11 +8,13 @@ import io.chiv.flightscraper.kayak.KayakParamsGrouping
 import io.chiv.flightscraper.model.Model.Price
 import io.chiv.flightscraper.model.Search
 
+import scala.concurrent.duration._
+
 trait DB {
 
   def withLock[T](f: IO[T]): IO[T]
 
-  def nextParamsToProcess: IO[Option[KayakParamsGrouping.WithRecordId]]
+  def nextParamsToProcess(inProgressTimeout: Duration = 30.minutes): IO[Option[KayakParamsGrouping.WithRecordId]]
   def completedRecords: IO[List[(KayakParamsGrouping.WithRecordId, Option[Price])]]
 
   def updatePrice(recordId: RecordId, lowestPrice: Option[Int]): IO[Unit]

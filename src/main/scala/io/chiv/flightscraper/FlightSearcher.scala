@@ -33,7 +33,8 @@ object FlightSearcher {
     override def processNext(): IO[Unit] =
       dbClient
         .withLock {
-          dbClient.nextParamsToProcess
+          dbClient
+            .nextParamsToProcess()
             .flatMap {
               case None =>
                 dbClient.completedRecords.flatMap {

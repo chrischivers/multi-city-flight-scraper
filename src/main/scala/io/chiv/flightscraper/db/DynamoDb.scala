@@ -3,7 +3,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import cats.data.{NonEmptyList, OptionT}
-import cats.effect.{Blocker, ContextShift, IO, Resource, Timer}
+import cats.effect.{Blocker, Clock, ContextShift, IO, Resource, Timer}
 import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.flatMap._
@@ -28,6 +28,8 @@ import scala.util.Try
 
 object DynamoDb {
 
+  type Before = Long
+
   case class Resources(amazonDynamoDB: AmazonDynamoDB, dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient, blocker: Blocker)
 
   protected[db] val primaryTableName = "searches"
@@ -39,6 +41,7 @@ object DynamoDb {
     val searchStatus = "search_status"
     val searchParams = "search_params"
     val price        = "price"
+    val timestamp    = "update_timestamp"
   }
 
   def dynamoDBResource(amazonDynamoDB: AmazonDynamoDB) = Resource.make(IO((new DynamoDB(amazonDynamoDB))))(c => IO(c.shutdown()))
@@ -107,18 +110,34 @@ object DynamoDb {
     } yield ()
   }
 
-  def apply(dynamoDb: DynamoDB,
-            lockClient: AmazonDynamoDBLockClient)(implicit timer: Timer[IO], logger: Logger[IO], cs: ContextShift[IO], blocker: Blocker) = new DB {
+  def apply(
+    dynamoDb: DynamoDB,
+    lockClient: AmazonDynamoDBLockClient
+  )(implicit clock: Clock[IO], timer: Timer[IO], logger: Logger[IO], cs: ContextShift[IO], blocker: Blocker) = new DB {
 
-    private def scanTable(table: Table, statusFilter: Option[RecordStatus]) = {
-      val scan = statusFilter.fold(new ScanSpec()) { status =>
-        new ScanSpec()
-          .withFilterExpression(s"${Table.searchStatus} = :status")
-          .withValueMap(
-            new ValueMap()
-              .withString(":status", status.value)
-          )
+    private def scanTable(table: Table, statusFilter: Map[RecordStatus, Option[Before]]) = {
+
+      val filtersWithIndex: Map[(RecordStatus, Option[Before]), Int] = statusFilter.zipWithIndex
+      val filterExpression = filtersWithIndex
+        .map {
+          case ((_, before), index) =>
+            s"${Table.searchStatus} = :status$index${before.fold("")(_ => s" AND ${Table.timestamp} < :update_timestamp$index")}"
+        }
+        .mkString(" OR ")
+      val valueMap = filtersWithIndex.foldLeft(new ValueMap()) {
+        case (vm, ((status, before), index)) =>
+          val v = vm.withString(s":status$index", status.value)
+          before.fold(v)(b => v.withLong(s":update_timestamp$index", b))
       }
+
+      val scan =
+        if (statusFilter.isEmpty) new ScanSpec()
+        else {
+          new ScanSpec()
+            .withFilterExpression(filterExpression)
+            .withValueMap(valueMap)
+        }
+
       IO(table.scan(scan).iterator().asScala.toList)
     }
 
@@ -135,48 +154,62 @@ object DynamoDb {
           price = Try(item.getInt(Table.price)).toOption.map(Price.apply)
         } yield (KayakParamsGrouping.WithRecordId(Search.Id(searchId), params, RecordId(recordId)), price)
 
-    override def nextParamsToProcess: IO[Option[KayakParamsGrouping.WithRecordId]] =
+    override def nextParamsToProcess(inProgressTimeout: Duration = 30.minutes): IO[Option[KayakParamsGrouping.WithRecordId]] =
       withTable { table =>
-        scanTable(table, Some(RecordStatus.Open)).flatMap { items =>
-          OptionT
-            .fromOption[IO](items.headOption)
-            .semiflatMap { item =>
-              parseItem(item).fold(str => IO.raiseError(new RuntimeException(s"Error: $str")), r => IO.pure(r._1))
-            }
-            .semiflatMap { item =>
-              val expressionAttributeNames  = Map[String, String]("#S"      -> Table.searchStatus).asJava
-              val expressionAttributeValues = Map[String, Object](":status" -> RecordStatus.InProgress.value).asJava
+        clock.realTime(MILLISECONDS).flatMap { now =>
+          val timeout = now - inProgressTimeout.toMillis
+          scanTable(table, Map(RecordStatus.Open -> None, RecordStatus.InProgress -> Some(timeout))).flatMap { items =>
+            OptionT
+              .fromOption[IO](items.headOption)
+              .semiflatMap { item =>
+                parseItem(item).fold(str => IO.raiseError(new RuntimeException(s"Error: $str")), r => IO.pure(r._1))
+              }
+              .semiflatMap { item =>
+                clock.realTime(MILLISECONDS).flatMap { now =>
+                  val expressionAttributeNames = Map[String, String]("#S" -> Table.searchStatus, "#T" -> Table.timestamp).asJava
+                  val expressionAttributeValues =
+                    Map[String, Object](":status" -> RecordStatus.InProgress.value, ":timestamp" -> Long.box(now)).asJava
 
-              IO(
-                table.updateItem(new PrimaryKey(Table.recordId, item.recordId.value),
-                                 "set #S=:status",
-                                 expressionAttributeNames,
-                                 expressionAttributeValues)
-              ).map(_ => item)
-            }
-            .value
+                  IO(
+                    table.updateItem(new PrimaryKey(Table.recordId, item.recordId.value),
+                                     "set #S=:status, #T=:timestamp",
+                                     expressionAttributeNames,
+                                     expressionAttributeValues)
+                  ).map(_ => item)
+                }
+              }
+              .value
+          }
         }
       }
 
     override def completedRecords: IO[List[(KayakParamsGrouping.WithRecordId, Option[Model.Price])]] =
       withTable { table =>
-        scanTable(table, Some(RecordStatus.Completed))
+        scanTable(table, Map(RecordStatus.Completed -> None))
           .flatMap(list => list.traverse(item => IO.fromEither(parseItem(item).leftMap(str => new RuntimeException(s"Error: $str")))))
       }
 
     override def updatePrice(recordId: DB.RecordId, lowestPrice: Option[Int]): IO[Unit] =
       withTable { table =>
-        val expressionAttributeNames = Map[String, String]("#P" -> Table.price, "#S" -> Table.searchStatus, "#R" -> Table.recordId).asJava
-        val expressionAttributeValues =
-          Map[String, Object](":price" -> lowestPrice.map(Int.box).orNull, ":status" -> RecordStatus.Completed.value, ":record_id" -> recordId.value).asJava
+        clock.realTime(MILLISECONDS).flatMap { now =>
+          val expressionAttributeNames =
+            Map[String, String]("#P" -> Table.price, "#S" -> Table.searchStatus, "#R" -> Table.recordId, "#T" -> Table.timestamp).asJava
+          val expressionAttributeValues =
+            Map[String, Object](":price"     -> lowestPrice.map(Int.box).orNull,
+                                ":status"    -> RecordStatus.Completed.value,
+                                ":record_id" -> recordId.value,
+                                ":timestamp" -> Long.box(now)).asJava
 
-        IO(
-          table.updateItem(new PrimaryKey(Table.recordId, recordId.value),
-                           "set #P=:price, #S=:status",
-                           "#R=:record_id",
-                           expressionAttributeNames,
-                           expressionAttributeValues)
-        )
+          IO(
+            table.updateItem(
+              new PrimaryKey(Table.recordId, recordId.value),
+              "set #P=:price, #S=:status, #T=:timestamp",
+              "#R=:record_id",
+              expressionAttributeNames,
+              expressionAttributeValues
+            )
+          )
+        }
 
       }.void
 
@@ -201,7 +234,7 @@ object DynamoDb {
 
     override def wipeData: IO[Unit] = withTable { table =>
       withTable { table =>
-        scanTable(table, None).flatMap { list =>
+        scanTable(table, Map.empty).flatMap { list =>
           list.traverse { item =>
             IO(Option(item.getString(Table.recordId)).get).flatMap { recordId =>
               IO(table.deleteItem(Table.recordId, recordId)).void

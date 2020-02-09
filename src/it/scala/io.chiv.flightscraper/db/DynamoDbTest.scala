@@ -3,7 +3,7 @@ package io.chiv.flightscraper.db
 import java.util.concurrent.Executors
 
 import cats.data.NonEmptyList
-import cats.effect.{Blocker, IO, Resource}
+import cats.effect.{Blocker, Clock, IO, Resource}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.model._
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient, CreateDynamoDBTableOptions}
@@ -13,6 +13,7 @@ import io.chiv.flightscraper.model.Search
 import io.chiv.flightscraper.util.TestGenerators
 import org.scalactic.TypeCheckedTripleEquals
 import org.scalatest.{Matchers, WordSpec}
+import scala.concurrent.duration._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -23,21 +24,11 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
   implicit val cs     = IO.contextShift(ec)
   implicit val timer  = IO.timer(ec)
   implicit val logger = Main.logger
+  implicit val clock  = Clock.extractFromTimer[IO]
 
   "dynamo db" should {
-    "return none if there are no records left to process" in {
 
-      setupDynamoClient
-        .use { dynamo =>
-          for {
-            nextParams <- dynamo.nextParamsToProcess
-            _          = nextParams should ===(None)
-          } yield ()
-        }
-        .unsafeRunSync()
-    }
-
-    "set up the table and return the next record" in {
+    "set up the table and return the next OPEN record" in {
 
       val searchId = Search.Id("test-string")
       val kpg1     = kayakParamsGrouping()
@@ -48,9 +39,46 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         .use { dynamo =>
           for {
             _          <- dynamo.setSearchData(data)
-            nextParams <- dynamo.nextParamsToProcess
+            nextParams <- dynamo.nextParamsToProcess()
             _          = nextParams.get.searchId should ===(searchId)
             _          = nextParams.get.params should (be(kpg1.params) or be(kpg2.params))
+          } yield ()
+        }
+        .unsafeRunSync()
+    }
+
+    "If an IN_PROGRESS record expires, return it again" in {
+
+      val searchId = Search.Id("test-string")
+      val kpg      = kayakParamsGrouping()
+      val data     = Map(searchId -> NonEmptyList.of(kpg))
+
+      setupDynamoClient
+        .use { dynamo =>
+          for {
+            _           <- dynamo.setSearchData(data)
+            nextParams1 <- dynamo.nextParamsToProcess()
+            _           = nextParams1.get.searchId should ===(searchId)
+            _           = nextParams1.get.params should ===(kpg.params)
+            nextParams2 <- dynamo.nextParamsToProcess()
+            _           = nextParams2 should ===(None)
+            _           <- IO.sleep(5.seconds)
+            nextParams3 <- dynamo.nextParamsToProcess(4.seconds)
+            _           = nextParams3.get.searchId should ===(searchId)
+            _           = nextParams3.get.params should ===(kpg.params)
+
+          } yield ()
+        }
+        .unsafeRunSync()
+    }
+
+    "return none if there are no records left to process" in {
+
+      setupDynamoClient
+        .use { dynamo =>
+          for {
+            nextParams <- dynamo.nextParamsToProcess()
+            _          = nextParams should ===(None)
           } yield ()
         }
         .unsafeRunSync()
@@ -66,9 +94,9 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         .use { dynamo =>
           for {
             _           <- dynamo.setSearchData(data)
-            fib1        <- dynamo.withLock(dynamo.nextParamsToProcess).start
-            fib2        <- dynamo.withLock(dynamo.nextParamsToProcess).start
-            fib3        <- dynamo.withLock(dynamo.nextParamsToProcess).start
+            fib1        <- dynamo.withLock(dynamo.nextParamsToProcess()).start
+            fib2        <- dynamo.withLock(dynamo.nextParamsToProcess()).start
+            fib3        <- dynamo.withLock(dynamo.nextParamsToProcess()).start
             nextParams1 <- fib1.join
             nextParams2 <- fib2.join
             nextParams3 <- fib3.join
@@ -88,9 +116,9 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         .use { dynamo =>
           for {
             _           <- dynamo.setSearchData(data)
-            nextParams1 <- dynamo.nextParamsToProcess
+            nextParams1 <- dynamo.nextParamsToProcess()
             _           = nextParams1.isDefined should ===(true)
-            nextParams2 <- dynamo.nextParamsToProcess
+            nextParams2 <- dynamo.nextParamsToProcess()
             _           = nextParams2.isDefined should ===(false)
           } yield ()
         }
@@ -107,13 +135,13 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         .use { dynamo =>
           for {
             _           <- dynamo.setSearchData(data)
-            nextParams1 <- dynamo.nextParamsToProcess
+            nextParams1 <- dynamo.nextParamsToProcess()
             _           = nextParams1.isDefined should ===(true)
             _           <- dynamo.updatePrice(nextParams1.get.recordId, Some(100))
-            nextParams2 <- dynamo.nextParamsToProcess
+            nextParams2 <- dynamo.nextParamsToProcess()
             _           = nextParams2.isDefined should ===(true)
             _           <- dynamo.updatePrice(nextParams2.get.recordId, None)
-            nextParams3 <- dynamo.nextParamsToProcess
+            nextParams3 <- dynamo.nextParamsToProcess()
             _           = nextParams3.isDefined should ===(false)
           } yield ()
         }
@@ -131,9 +159,9 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         .use { dynamo =>
           for {
             _                <- dynamo.setSearchData(data)
-            nextParams1      <- dynamo.nextParamsToProcess
+            nextParams1      <- dynamo.nextParamsToProcess()
             _                <- dynamo.updatePrice(nextParams1.get.recordId, Some(100))
-            nextParams2      <- dynamo.nextParamsToProcess
+            nextParams2      <- dynamo.nextParamsToProcess()
             _                <- dynamo.updatePrice(nextParams2.get.recordId, Some(150))
             completedRecords <- dynamo.completedRecords
             _                = completedRecords should have size 2
@@ -154,7 +182,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
           for {
             _          <- dynamo.setSearchData(data)
             _          <- dynamo.wipeData
-            nextParams <- dynamo.nextParamsToProcess
+            nextParams <- dynamo.nextParamsToProcess()
             _          = nextParams.isDefined should ===(false)
           } yield ()
         }
@@ -183,7 +211,7 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
         _      <- IO(resources.amazonDynamoDB.deleteTable(DynamoDb.primaryTableName)).attempt
         _      <- IO(resources.amazonDynamoDB.deleteTable(DynamoDb.lockTableName)).attempt
         _      <- DynamoDb.createTablesIfNotExisting(resources.amazonDynamoDB)
-        client <- IO(DynamoDb(resources.dynamoDb, resources.lockClient)(implicitly, implicitly, implicitly, resources.blocker))
+        client <- IO(DynamoDb(resources.dynamoDb, resources.lockClient)(implicitly, implicitly, implicitly, implicitly, resources.blocker))
       } yield client
     }
   }

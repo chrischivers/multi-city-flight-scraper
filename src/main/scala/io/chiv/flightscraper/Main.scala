@@ -2,7 +2,7 @@ package io.chiv.flightscraper
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import cats.effect.{Blocker, ExitCode, IO, IOApp, Resource, SyncIO}
+import cats.effect.{Blocker, Clock, ExitCode, IO, IOApp, Resource, SyncIO}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.dynamodbv2.{AmazonDynamoDB, AmazonDynamoDBClientBuilder, AmazonDynamoDBLockClient}
@@ -18,6 +18,8 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import scala.concurrent.ExecutionContext
 
 object Main extends IOApp.WithContext {
+
+  val clock = Clock.extractFromTimer[IO]
 
   implicit val logger: SelfAwareStructuredLogger[IO] =
     Slf4jLogger.getLogger[IO]
@@ -42,13 +44,17 @@ object Main extends IOApp.WithContext {
         config.geckoDriverLocation,
         headless = true
       )
-      emailClient  = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
-      kayakClient  = KayakClient.apply(webDriver, emailClient)
-      dbClient: DB = DynamoDb(dynamoResources.dynamoDb, dynamoResources.lockClient)(implicitly, implicitly, implicitly, dynamoResources.blocker)
-      _            <- DynamoDb.createTablesIfNotExisting(dynamoResources.amazonDynamoDB)
-      processor    = FlightSearcher(kayakClient, emailClient, dbClient, searches)
-      _            <- processor.processNext()
-      _            <- app(dynamoResources) //repeat
+      emailClient = EmailClient(config.emailAccessKey, config.emailSecretKey, config.emailAddress)
+      kayakClient = KayakClient.apply(webDriver, emailClient)
+      dbClient: DB = DynamoDb(dynamoResources.dynamoDb, dynamoResources.lockClient)(clock,
+                                                                                    implicitly,
+                                                                                    implicitly,
+                                                                                    implicitly,
+                                                                                    dynamoResources.blocker)
+      _         <- DynamoDb.createTablesIfNotExisting(dynamoResources.amazonDynamoDB)
+      processor = FlightSearcher(kayakClient, emailClient, dbClient, searches)
+      _         <- processor.processNext()
+      _         <- app(dynamoResources) //repeat
     } yield ()
 
   private def resources: Resource[IO, Resources] = {
