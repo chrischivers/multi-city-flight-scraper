@@ -180,8 +180,8 @@ class DynamoDbTest extends WordSpec with Matchers with TypeCheckedTripleEquals w
       blocker        <- Blocker[IO]
     } yield Resources(amazonDynamoDb, dynamoDB, lockClient, blocker)).evalMap { resources =>
       for {
-        _      <- IO(resources.amazonDynamoDB.deleteTable(DynamoDb.tableName)).attempt
-        _      <- IO(resources.amazonDynamoDB.deleteTable("lockTable")).attempt
+        _      <- IO(resources.amazonDynamoDB.deleteTable(DynamoDb.primaryTableName)).attempt
+        _      <- IO(resources.amazonDynamoDB.deleteTable(DynamoDb.lockTableName)).attempt
         _      <- DynamoDb.createTablesIfNotExisting(resources.amazonDynamoDB)
         client <- IO(DynamoDb(resources.dynamoDb, resources.lockClient)(implicitly, implicitly, implicitly, resources.blocker))
       } yield client

@@ -30,7 +30,8 @@ object DynamoDb {
 
   case class Resources(amazonDynamoDB: AmazonDynamoDB, dynamoDb: DynamoDB, lockClient: AmazonDynamoDBLockClient, blocker: Blocker)
 
-  val tableName = "searches"
+  protected[db] val primaryTableName = "searches"
+  protected[db] val lockTableName    = "lockTable"
 
   private object Table {
     val recordId     = "record_id"
@@ -47,7 +48,7 @@ object DynamoDb {
       IO(
         new AmazonDynamoDBLockClient(
           AmazonDynamoDBLockClientOptions
-            .builder(amazonDynamoDb, "lockTable")
+            .builder(amazonDynamoDb, lockTableName)
             .withTimeUnit(TimeUnit.SECONDS)
             .withLeaseDuration(30L)
             .withHeartbeatPeriod(3L)
@@ -60,11 +61,11 @@ object DynamoDb {
 
   def createTablesIfNotExisting(amazonDynamoDB: AmazonDynamoDB)(implicit logger: Logger[IO], timer: Timer[IO]) = {
 
-    val keySchema            = List(new KeySchemaElement().withAttributeName("record_id").withKeyType(KeyType.HASH)).asJava
-    val attributeDefinitions = List(new AttributeDefinition().withAttributeName("record_id").withAttributeType("S")).asJava
+    val keySchema            = List(new KeySchemaElement().withAttributeName(Table.recordId).withKeyType(KeyType.HASH)).asJava
+    val attributeDefinitions = List(new AttributeDefinition().withAttributeName(Table.recordId).withAttributeType("S")).asJava
 
     def awaitTableToBeReady(tableName: String): IO[Unit] =
-      IO(amazonDynamoDB.describeTable("lockTable").getTable.getTableStatus).flatMap {
+      IO(amazonDynamoDB.describeTable(tableName).getTable.getTableStatus).flatMap {
         case "ACTIVE" => IO.unit
         case _        => IO.sleep(5.seconds) >> awaitTableToBeReady(tableName)
       }
@@ -77,18 +78,19 @@ object DynamoDb {
                          new ProvisionedThroughput()
                            .withReadCapacityUnits(5L)
                            .withWriteCapacityUnits(6L),
-                         "lockTable")
+                         lockTableName)
                 .build()
             )
           ).handleErrorWith {
-            case err: ResourceInUseException => logger.info("Not creating table lockTable as already exists")
+            case err: ResourceInUseException => logger.info(s"Not creating table $lockTableName as already exists")
+            case err                         => logger.info(err)("Error thrown when attempting to create table. Moving on.")
           }
-      _ <- awaitTableToBeReady("lockTable")
+      _ <- awaitTableToBeReady(lockTableName)
       _ <- IO {
             amazonDynamoDB
               .createTable(
                 new CreateTableRequest()
-                  .withTableName(DynamoDb.tableName)
+                  .withTableName(DynamoDb.primaryTableName)
                   .withKeySchema(keySchema)
                   .withAttributeDefinitions(attributeDefinitions)
                   .withProvisionedThroughput(
@@ -98,9 +100,10 @@ object DynamoDb {
                   )
               )
           }.handleErrorWith {
-            case err: ResourceInUseException => logger.info(s"Not creating table ${DynamoDb.tableName} as already exists")
+            case err: ResourceInUseException => logger.info(s"Not creating table $primaryTableName as already exists")
+            case err                         => logger.info(err)("Error thrown when attempting to create table. Moving on.")
           }
-      _ <- awaitTableToBeReady(DynamoDb.tableName)
+      _ <- awaitTableToBeReady(DynamoDb.primaryTableName)
     } yield ()
   }
 
@@ -163,13 +166,14 @@ object DynamoDb {
 
     override def updatePrice(recordId: DB.RecordId, lowestPrice: Option[Int]): IO[Unit] =
       withTable { table =>
-        val expressionAttributeNames = Map[String, String]("#P" -> Table.price, "#S" -> Table.searchStatus).asJava
+        val expressionAttributeNames = Map[String, String]("#P" -> Table.price, "#S" -> Table.searchStatus, "#R" -> Table.recordId).asJava
         val expressionAttributeValues =
-          Map[String, Object](":price" -> lowestPrice.map(Int.box).orNull, ":status" -> RecordStatus.Completed.value).asJava
+          Map[String, Object](":price" -> lowestPrice.map(Int.box).orNull, ":status" -> RecordStatus.Completed.value, ":record_id" -> recordId.value).asJava
 
         IO(
           table.updateItem(new PrimaryKey(Table.recordId, recordId.value),
                            "set #P=:price, #S=:status",
+                           "#R=:record_id",
                            expressionAttributeNames,
                            expressionAttributeValues)
         )
@@ -208,7 +212,7 @@ object DynamoDb {
     }
 
     private def withTable[T](f: Table => IO[T]): IO[T] =
-      IO(dynamoDb.getTable(tableName)).flatMap(f)
+      IO(dynamoDb.getTable(primaryTableName)).flatMap(f)
 
     override def withLock[T](f: IO[T]): IO[T] = {
       val options = AcquireLockOptions
